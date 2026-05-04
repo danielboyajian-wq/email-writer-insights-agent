@@ -1,0 +1,11 @@
+.env
+.env.local
+venv/
+__pycache__/
+*.pyc
+.DS_Store
+.streamlit/secrets.toml
+examples/
+*.png
+*.jpg
+*.jpeg
