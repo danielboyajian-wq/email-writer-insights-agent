@@ -10,16 +10,18 @@ from pathlib import Path
 import anthropic
 
 from personas import format_persona_for_prompt
+from profiles import load_tone as load_profile_tone
 
 MODEL = "claude-sonnet-4-6"
-TONE_FILE = Path(__file__).parent / "tones" / "tone.md"
 COMPANY_CONTEXT_FILE = Path(__file__).parent / "company_context.md"
 
 
-def load_tone() -> str:
-    if not TONE_FILE.exists():
-        return "(no tone file found — drop your examples in tones/tone.md)"
-    return TONE_FILE.read_text()
+def load_tone(profile_slug: str = "daniel") -> str:
+    """Load tone for the given profile. Falls back to a placeholder."""
+    text = load_profile_tone(profile_slug)
+    if text:
+        return text
+    return f"(no tone file found for profile '{profile_slug}' — create one in the Profiles tab)"
 
 
 def load_company_context() -> str:
@@ -37,6 +39,7 @@ class DraftRequest:
     recipient_title: str
     persona_slug: str               # "marketing" | "sales" | "revops"
     your_pitch: str
+    profile_slug: str = "daniel"    # which user profile's tone to use
     linkedin_text: str = ""
     extra_notes: str = ""
 
@@ -139,7 +142,7 @@ def draft_email(req: DraftRequest) -> tuple[str, dict]:
     response = client.messages.create(
         model=MODEL,
         max_tokens=2000,
-        system=_build_system(load_tone(), load_company_context()),
+        system=_build_system(load_tone(req.profile_slug), load_company_context()),
         messages=[{"role": "user", "content": _build_user_message(req)}],
     )
     text = next((b.text for b in response.content if b.type == "text"), "")
