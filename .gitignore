@@ -9,3 +9,5 @@ examples/
 *.png
 *.jpg
 *.jpeg
+profiles/.write.lock
+profiles/*/*.tmp

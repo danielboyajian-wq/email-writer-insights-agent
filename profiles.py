@@ -19,9 +19,21 @@ from pathlib import Path
 from typing import Optional
 
 import anthropic
+from filelock import FileLock, Timeout
 
 PROFILES_DIR = Path(__file__).parent / "profiles"
 PROFILES_DIR.mkdir(exist_ok=True)
+
+# Single global write lock for profile mutations. Reads are not locked
+# (they're safe since file writes are atomic via os.replace under the hood
+# and worst case a reader gets a stale-by-milliseconds view).
+_LOCK_PATH = PROFILES_DIR / ".write.lock"
+_LOCK_TIMEOUT = 10  # seconds — if a write is held longer than this, something is wrong
+
+
+def _write_lock() -> FileLock:
+    """Returns the global profile write lock. Use as a context manager."""
+    return FileLock(str(_LOCK_PATH), timeout=_LOCK_TIMEOUT)
 
 
 @dataclass
@@ -84,51 +96,80 @@ def save_profile(
     default_pitch: str = "",
     slug: Optional[str] = None,
 ) -> Profile:
-    """Create or overwrite a profile. Returns the saved Profile."""
+    """Create or overwrite a profile atomically. Returns the saved Profile.
+
+    Acquires a global write lock so concurrent saves (e.g. two users editing
+    different profiles at the same time, or the same profile from two tabs)
+    can't interleave their writes and leave a half-written meta.json.
+    """
     if not slug:
         slug = slugify(name)
-    pdir = PROFILES_DIR / slug
-    pdir.mkdir(parents=True, exist_ok=True)
 
-    # Build tone.md
-    examples_block = ""
-    for i, ex in enumerate(examples, 1):
-        examples_block += f"\n### Example {i}\n\n{ex.strip()}\n\n---\n"
+    try:
+        with _write_lock():
+            pdir = PROFILES_DIR / slug
+            pdir.mkdir(parents=True, exist_ok=True)
 
-    tone_md = (
-        f"# {name} — outbound tone\n\n"
-        f"## Voice description\n\n"
-        f"{tone_description.strip()}\n\n"
-        f"---\n\n"
-        f"## Examples\n{examples_block}"
-    )
-    (pdir / "tone.md").write_text(tone_md)
+            # Build tone.md
+            examples_block = ""
+            for i, ex in enumerate(examples, 1):
+                examples_block += f"\n### Example {i}\n\n{ex.strip()}\n\n---\n"
 
-    # Meta
-    existing = get_profile(slug)
-    meta = {
-        "name": name,
-        "created_at": existing.created_at if existing else datetime.utcnow().isoformat(),
-        "default_pitch": default_pitch,
-    }
-    (pdir / "meta.json").write_text(json.dumps(meta, indent=2))
+            tone_md = (
+                f"# {name} — outbound tone\n\n"
+                f"## Voice description\n\n"
+                f"{tone_description.strip()}\n\n"
+                f"---\n\n"
+                f"## Examples\n{examples_block}"
+            )
 
-    return Profile(
-        slug=slug,
-        name=name,
-        created_at=meta["created_at"],
-        default_pitch=default_pitch,
-    )
+            # Atomic write: stage to .tmp, then rename. Rename is atomic on POSIX.
+            tone_path = pdir / "tone.md"
+            tone_tmp = pdir / "tone.md.tmp"
+            tone_tmp.write_text(tone_md)
+            tone_tmp.replace(tone_path)
+
+            existing = get_profile(slug)
+            meta = {
+                "name": name,
+                "created_at": existing.created_at if existing else datetime.utcnow().isoformat(),
+                "default_pitch": default_pitch,
+            }
+            meta_path = pdir / "meta.json"
+            meta_tmp = pdir / "meta.json.tmp"
+            meta_tmp.write_text(json.dumps(meta, indent=2))
+            meta_tmp.replace(meta_path)
+
+            return Profile(
+                slug=slug,
+                name=name,
+                created_at=meta["created_at"],
+                default_pitch=default_pitch,
+            )
+    except Timeout:
+        raise RuntimeError(
+            "Could not acquire profile write lock within 10s. "
+            "Another process may be stuck. Try again."
+        )
 
 
 def delete_profile(slug: str) -> bool:
-    """Delete a profile directory. Returns True if removed."""
+    """Delete a profile directory atomically. Returns True if removed."""
     pdir = PROFILES_DIR / slug
     if not pdir.exists():
         return False
-    import shutil
-    shutil.rmtree(pdir)
-    return True
+    try:
+        with _write_lock():
+            if not pdir.exists():  # re-check inside lock
+                return False
+            import shutil
+            shutil.rmtree(pdir)
+            return True
+    except Timeout:
+        raise RuntimeError(
+            "Could not acquire profile write lock within 10s. "
+            "Another process may be stuck. Try again."
+        )
 
 
 # --- Claude vision: transcribe email screenshots -----------------------------
