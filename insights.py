@@ -15,6 +15,8 @@ import anthropic
 import requests
 from bs4 import BeautifulSoup
 
+from cache import cache_brief, get_cached_brief
+
 MODEL = "claude-sonnet-4-6"
 
 BUCKETS = [
@@ -45,7 +47,7 @@ def root_domain(url: str) -> str:
     return f"{p.scheme}://{p.netloc}"
 
 
-def scrape_homepage(url: str, max_chars: int = 8000) -> str:
+def scrape_homepage(url: str, max_chars: int = 4000) -> str:
     """Plain HTTP fetch + text extraction. No JS rendering."""
     headers = {
         "User-Agent": (
@@ -113,9 +115,20 @@ HARD RULES:
 """
 
 
-def generate_brief(website_url: str) -> dict:
-    """Scrape homepage + one Claude call with web_search. Returns parsed dict."""
+def generate_brief(website_url: str, force_refresh: bool = False) -> dict:
+    """Scrape homepage + one Claude call with web_search. Returns parsed dict.
+
+    Results are cached on disk for 24 hours per normalized domain. Set
+    `force_refresh=True` to skip the cache and re-research.
+    """
     domain = root_domain(website_url)
+
+    # Cache lookup: cheap, deterministic, makes repeat lookups instant.
+    if not force_refresh:
+        cached = get_cached_brief(domain)
+        if cached is not None:
+            return cached
+
     homepage_text = scrape_homepage(domain)
 
     client = anthropic.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
@@ -153,7 +166,9 @@ def generate_brief(website_url: str) -> dict:
         break
 
     text = "\n".join(b.text for b in (response.content if response else []) if b.type == "text")
-    return _parse_brief(text)
+    brief = _parse_brief(text)
+    cache_brief(domain, brief)
+    return brief
 
 
 def _parse_brief(text: str) -> dict:

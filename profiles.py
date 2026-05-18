@@ -174,7 +174,8 @@ def delete_profile(slug: str) -> bool:
 
 # --- Claude vision: transcribe email screenshots -----------------------------
 
-VISION_MODEL = "claude-sonnet-4-6"
+# Haiku is great at OCR and ~5x cheaper. Sonnet was overkill for transcription.
+VISION_MODEL = "claude-haiku-4-5"
 
 _TRANSCRIBE_PROMPT = """Transcribe the email visible in this screenshot.
 

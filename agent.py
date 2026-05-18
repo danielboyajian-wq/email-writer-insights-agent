@@ -91,7 +91,10 @@ def _build_system(tone_text: str, company_context: str) -> list[dict]:
         {
             "type": "text",
             "text": cached_block,
-            "cache_control": {"type": "ephemeral"},
+            # 1h TTL: better cache hit rate for occasional drafters,
+            # at the cost of a ~1.6x write premium on the first call.
+            # Breaks even after ~3 drafts on the same tone within an hour.
+            "cache_control": {"type": "ephemeral", "ttl": "1h"},
         },
     ]
 
@@ -141,7 +144,7 @@ def draft_email(req: DraftRequest) -> tuple[str, dict]:
     client = anthropic.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
     response = client.messages.create(
         model=MODEL,
-        max_tokens=2000,
+        max_tokens=1200,
         system=_build_system(load_tone(req.profile_slug), load_company_context()),
         messages=[{"role": "user", "content": _build_user_message(req)}],
     )

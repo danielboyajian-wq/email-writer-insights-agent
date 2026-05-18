@@ -11,3 +11,4 @@ examples/
 *.jpeg
 profiles/.write.lock
 profiles/*/*.tmp
+.cache/
