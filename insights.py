@@ -8,6 +8,7 @@ Total runtime ~15-25s instead of multi-minute agentic loops.
 import json
 import os
 import re
+from datetime import date, datetime, timedelta
 from typing import Optional
 from urllib.parse import urlparse
 
@@ -106,7 +107,7 @@ Schema:
 }
 
 HARD RULES:
-- DATE FILTER: Only include insights from the last 12 months. Exclude anything older. Each insight MUST include a `date`. If you can't verify a date, skip the insight.
+- DATE FILTER: Strongly prefer insights from the last 6 months. Each insight MUST include a `date` (YYYY-MM or YYYY-MM-DD). If you can't verify a date, skip the insight. Older insights (6-18 months) may be included ONLY if they're highly relevant for outreach (e.g. an earnings call, major product launch, or strategic pivot). Anything older than 18 months: skip.
 - PUBLIC COMPANY CHECK: Determine if the company is publicly traded. Set `is_public` boolean and `ticker` (or null). If public, INCLUDE recent earnings / 10-K / 10-Q references as insights when relevant.
 - 5-10 insights total. Quality over quantity.
 - Every insight must be FACTUAL with a source URL.
@@ -190,6 +191,37 @@ def _parse_brief(text: str) -> dict:
     data.setdefault("company_summary", "")
     data.setdefault("insights", [])
     return data
+
+
+STALE_AFTER_DAYS = 183  # ~6 months
+
+
+def _parse_insight_date(raw: str) -> Optional[date]:
+    """Parse 'YYYY-MM' or 'YYYY-MM-DD'. Returns None on failure."""
+    if not raw or not isinstance(raw, str):
+        return None
+    raw = raw.strip()
+    for fmt in ("%Y-%m-%d", "%Y-%m"):
+        try:
+            d = datetime.strptime(raw, fmt).date()
+            return d
+        except ValueError:
+            continue
+    return None
+
+
+def insight_age_days(insight: dict) -> Optional[int]:
+    """Days since the insight's `date`. None if undatable."""
+    d = _parse_insight_date(insight.get("date", ""))
+    if d is None:
+        return None
+    return (date.today() - d).days
+
+
+def is_stale(insight: dict, threshold_days: int = STALE_AFTER_DAYS) -> bool:
+    """True if the insight is older than the threshold (default 6 months)."""
+    age = insight_age_days(insight)
+    return age is not None and age > threshold_days
 
 
 def insights_by_bucket(brief: dict) -> dict[str, list[dict]]:

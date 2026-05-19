@@ -8,7 +8,13 @@ from dotenv import load_dotenv
 load_dotenv(override=True)
 
 from agent import DraftRequest, draft_email
-from insights import BUCKETS, generate_brief, insights_by_bucket
+from insights import (
+    BUCKETS,
+    generate_brief,
+    insight_age_days,
+    insights_by_bucket,
+    is_stale,
+)
 from personas import PERSONAS, infer_persona_from_title
 from profiles import (
     delete_profile,
@@ -151,10 +157,19 @@ with draft_tab:
                                 label_visibility="collapsed",
                             )
                         with c_body:
+                            stale_html = ""
+                            if is_stale(ins):
+                                age = insight_age_days(ins)
+                                months = age // 30 if age else 0
+                                stale_html = (
+                                    f'<span class="eia-stale-tag" '
+                                    f'title="Insight is older than 6 months. Verify before sending.">'
+                                    f'{months}mo old</span>'
+                                )
                             st.markdown(
                                 f"<div style='font-size:0.9rem; font-weight:500; "
                                 f"line-height:1.4; color:var(--fg); margin-bottom:0.15rem;'>"
-                                f"{ins.get('title','')}</div>",
+                                f"{ins.get('title','')}{stale_html}</div>",
                                 unsafe_allow_html=True,
                             )
                             st.markdown(
