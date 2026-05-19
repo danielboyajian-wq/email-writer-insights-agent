@@ -107,7 +107,7 @@ with draft_tab:
         with run_col:
             run = st.button("Run research", type="primary", disabled=not website, use_container_width=True)
         if run:
-            with st.spinner("Reading the homepage. Searching the open web. Synthesizing."):
+            with st.spinner("Reading homepage, searching news, synthesizing (~15s)"):
                 try:
                     brief = generate_brief(website)
                     st.session_state["brief"] = brief
@@ -157,19 +157,30 @@ with draft_tab:
                                 label_visibility="collapsed",
                             )
                         with c_body:
-                            stale_html = ""
-                            if is_stale(ins):
-                                age = insight_age_days(ins)
-                                months = age // 30 if age else 0
-                                stale_html = (
-                                    f'<span class="eia-stale-tag" '
-                                    f'title="Insight is older than 6 months. Verify before sending.">'
-                                    f'{months}mo old</span>'
-                                )
+                            age = insight_age_days(ins)
+                            age_html = ""
+                            if age is not None:
+                                if age < 30:
+                                    label = f"{age}d"
+                                else:
+                                    months = age // 30
+                                    label = f"{months}mo"
+                                if is_stale(ins):
+                                    age_html = (
+                                        f'<span class="eia-age-tag is-stale" '
+                                        f'title="Older than 6 months. Verify before referencing.">'
+                                        f'{label}</span>'
+                                    )
+                                else:
+                                    age_html = (
+                                        f'<span class="eia-age-tag is-fresh" '
+                                        f'title="Within the last 6 months.">'
+                                        f'{label}</span>'
+                                    )
                             st.markdown(
                                 f"<div style='font-size:0.9rem; font-weight:500; "
                                 f"line-height:1.4; color:var(--fg); margin-bottom:0.15rem;'>"
-                                f"{ins.get('title','')}{stale_html}</div>",
+                                f"{ins.get('title','')}{age_html}</div>",
                                 unsafe_allow_html=True,
                             )
                             st.markdown(

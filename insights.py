@@ -107,12 +107,14 @@ Schema:
 }
 
 HARD RULES:
-- DATE FILTER: Strongly prefer insights from the last 6 months. Each insight MUST include a `date` (YYYY-MM or YYYY-MM-DD). If you can't verify a date, skip the insight. Older insights (6-18 months) may be included ONLY if they're highly relevant for outreach (e.g. an earnings call, major product launch, or strategic pivot). Anything older than 18 months: skip.
+- DATE FIELD: Each insight MUST include a `date` (YYYY-MM or YYYY-MM-DD) when you can find one. If you genuinely can't find a date after one search, omit the insight rather than guessing. Do NOT re-search to verify dates; one targeted search is enough.
+- AGE PREFERENCE: Prefer the most recent signals you find. Don't include anything older than 18 months. The UI will flag anything older than 6 months for the user, so you don't need to filter that tier.
 - PUBLIC COMPANY CHECK: Determine if the company is publicly traded. Set `is_public` boolean and `ticker` (or null). If public, INCLUDE recent earnings / 10-K / 10-Q references as insights when relevant.
 - 5-10 insights total. Quality over quantity.
 - Every insight must be FACTUAL with a source URL.
 - Skip buckets with no real signals — don't pad.
 - "why_it_matters" is sharp and outreach-focused, not generic.
+- After your 2 web_searches and homepage read, STOP and produce the JSON. Do not loop further.
 """
 
 
@@ -143,11 +145,14 @@ def generate_brief(website_url: str, force_refresh: bool = False) -> dict:
 
     messages = [{"role": "user", "content": user_msg}]
 
+    # Cap the agentic loop at 2 iterations to prevent runaway latency.
+    # With max_uses=2 on web_search, this gives the model 2 searches total
+    # and a synthesis pass. effort=medium keeps reasoning quality up.
     response = None
-    for _ in range(4):
+    for _ in range(2):
         response = client.messages.create(
             model=MODEL,
-            max_tokens=8000,
+            max_tokens=6000,
             system=BRIEF_SYSTEM,
             output_config={"effort": "medium"},
             tools=[
@@ -224,12 +229,25 @@ def is_stale(insight: dict, threshold_days: int = STALE_AFTER_DAYS) -> bool:
     return age is not None and age > threshold_days
 
 
+def _sort_key(ins: dict) -> tuple:
+    """Sort by age ascending (freshest first). Undated insights go last."""
+    age = insight_age_days(ins)
+    if age is None:
+        # Push undated insights to the end; among them, preserve original order
+        return (1, 10_000_000)
+    return (0, age)
+
+
 def insights_by_bucket(brief: dict) -> dict[str, list[dict]]:
-    """Group insights by bucket for display."""
+    """Group insights by bucket, freshest first inside each bucket."""
     grouped = {b: [] for b in BUCKETS}
     for ins in brief.get("insights", []):
         bucket = ins.get("bucket", "news")
         if bucket not in grouped:
             grouped[bucket] = []
         grouped[bucket].append(ins)
-    return {b: items for b, items in grouped.items() if items}
+    return {
+        b: sorted(items, key=_sort_key)
+        for b, items in grouped.items()
+        if items
+    }

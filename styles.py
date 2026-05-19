@@ -527,30 +527,69 @@ code, pre {
   border-bottom-color: var(--accent);
 }
 
-/* ---- Stale-insight tag ---- */
-.eia-stale-tag {
+/* ---- Age pill (fresh / stale) ---- */
+.eia-age-tag {
   display: inline-flex;
   align-items: center;
-  gap: 0.3rem;
+  gap: 0.32rem;
   font-family: var(--font);
   font-size: 0.68rem;
   font-weight: 500;
   letter-spacing: 0.02em;
   padding: 0.12rem 0.45rem;
   border-radius: 999px;
-  background: oklch(94% 0.025 80);
-  color: oklch(42% 0.08 70);
-  border: 1px solid oklch(86% 0.04 80);
+  vertical-align: middle;
+  margin-left: 0.4rem;
+  line-height: 1.2;
+}
+.eia-age-tag::before {
+  content: '';
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+}
+
+/* Fresh: green */
+.eia-age-tag.is-fresh {
+  background: oklch(95% 0.04 155);
+  color: oklch(38% 0.1 155);
+  border: 1px solid oklch(86% 0.06 155);
+}
+.eia-age-tag.is-fresh::before {
+  background: oklch(62% 0.14 155);
+}
+
+/* Stale: amber/orange */
+.eia-age-tag.is-stale {
+  background: oklch(94% 0.04 75);
+  color: oklch(42% 0.11 65);
+  border: 1px solid oklch(86% 0.06 75);
+}
+.eia-age-tag.is-stale::before {
+  background: oklch(68% 0.16 65);
+}
+
+/* Backwards-compat alias kept for any older code paths */
+.eia-stale-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.32rem;
+  font-family: var(--font);
+  font-size: 0.68rem;
+  font-weight: 500;
+  padding: 0.12rem 0.45rem;
+  border-radius: 999px;
+  background: oklch(94% 0.04 75);
+  color: oklch(42% 0.11 65);
+  border: 1px solid oklch(86% 0.06 75);
   vertical-align: middle;
   margin-left: 0.4rem;
   line-height: 1.2;
 }
 .eia-stale-tag::before {
   content: '';
-  width: 5px;
-  height: 5px;
-  border-radius: 50%;
-  background: oklch(68% 0.13 75);
+  width: 5px; height: 5px; border-radius: 50%;
+  background: oklch(68% 0.16 65);
 }
 
 /* ---- Status pip ---- */
