@@ -47,7 +47,9 @@ Enterprise and mid-market B2B companies. Buyers usually sit in:
 Industries: Technology, Financial Services, Manufacturing, Business Services,
 Transportation & Logistics. Customers include Okta, SAP, Shell, Sumo Logic,
 Bynder, Custom Truck One Source, Tipalti, Aruba, Sage, Domo, Tableau, Dell,
-Flexera, FireMon, OpenText, Everbridge, Service Express.
+Flexera, FireMon, OpenText, Everbridge, Service Express, Coveo, Bonterra,
+Vendavo, Hexagon, Mission Cloud, Warren Rupp, NanaWall, Khoros, Clari, F12.net,
+INFUSE.
 
 ## Differentiators (what to subtly reflect in emails)
 
@@ -59,40 +61,173 @@ Flexera, FireMon, OpenText, Everbridge, Service Express.
 - **Recognized leader.** 6sense was named a Leader in *The Forrester Wave™:
   Revenue Marketing Platforms for B2B, Q1 2026.*
 
-## Outcomes 6sense customers see (use sparingly, only when relevant)
+---
 
-**Marketing outcomes:**
-- FireMon: 80% increase in accounts engaged, 3x faster campaign launches,
-  54% faster opportunity close time
-- OpenText: scaled from 3 to 21 campaigns, 27% new revenue in 30 days
-- Everbridge: streamlined renewal engagement across 930 accounts annually
+# Strategic POVs — 6sense's worldview
 
-**Sales outcomes:**
-- Domo / Tableau / Dell average: up to 8x lift in opportunity open rate, 2x
-  improvement in win rate, 1.5–2x faster time to close
-- Cross-customer averages: 2x increase in deal size, 20% better conversions,
-  31% more opportunities
-- Flexera: 82% pipeline lift from high-intent accounts
-- Service Express: 25% acceleration in sales velocity
+These are the strategic ideas 6sense pushes publicly in its research and
+guides. Daniel can reference them as conversation starters and connect them
+to a prospect's pain.
 
-**RevOps outcomes:**
-- Socure / LiveOps: transformational pipeline results, "fastest turnaround
-  we've ever seen"
+## The market is shifting fast in 2026
 
-**Industry data Daniel can cite:**
-- 2026 State of BDR Report: 99% of BDRs report using AI (vs. 62% last year);
-  outreach volume doubled to 33 touches per contact but doesn't reliably
-  correlate with quota attainment; targeting two additional personas
-  correlates with 11 points higher quota attainment.
+- **Point of First Contact (POFC) dropped 8 percentage points globally in
+  2025.** Buyers are engaging vendors earlier than at any time in the last
+  several years. Driven by AI evaluation needs and economic urgency.
+- **94% of B2B buyers now use LLMs during their buying journey.** Anonymous
+  research expanded — buyers now ask ChatGPT for vendor comparisons, leaving
+  zero trackable signal.
+- **The buying cycle compressed** from 11.3 months to 10.1 months globally.
+  Sales cycles are NOT actually getting longer; the perception comes from
+  buyers engaging earlier in their journey.
+- **First on the shortlist wins ~77% of deals.** Position matters more than
+  cycle length.
 
-## Rules for using this context
+## Inbound lead gen is breaking
+
+- Buyers complete **~70% of their research before contacting sales.**
+- **97% of buyer research happens anonymously.** Your forms see almost none of it.
+- **85% of buyers have direct prior experience** with vendors they evaluate —
+  the highest ever recorded. Brand awareness determines shortlist inclusion
+  *before* LLM research begins.
+- Average B2B buyer enters a new process with **8 partial or complete buying
+  journeys already under their belt** for that category. Most are not blank
+  slates — write for senior practitioners, not beginners.
+- **Trust in analyst reports collapsed.** Only 14% of buyers consult them
+  (down 60% since 2022). Peer / review-site research jumped to 31% (from 13%).
+
+## What works now: ABM done right
+
+- **One-to-one** (top 10-50 accounts, bespoke), **one-to-few** (clusters of
+  similar accounts), and **one-to-many** (AI-scaled across hundreds) — each
+  needs different resources and ROI expectations.
+- Measurement shifts from MQLs and form-fills to **account engagement
+  progression, buying-stage movement, and pipeline at the account level**.
+- Buying committees are **11+ stakeholders**. Individual lead scores don't
+  represent account momentum.
+
+## What 6sense believes about BDRs (2026 State of BDR Report)
+
+- **99% of BDRs use AI** (up from 53% in 2024) — table stakes, not a
+  competitive edge.
+- **Outreach volume doubled** to 34 touches per contact in 1-3 months. Volume
+  does NOT correlate with quota attainment.
+- **Average quota attainment is 92%** despite quotas hitting a 5-year high.
+- BDRs with strongest manager support hit **~100% of quota** vs. ~77% for
+  those without. The support gap matters more than the AI gap.
+- **Multi-threading wins**: reaching 2 additional personas per account
+  correlates with ~11pp higher quota attainment.
+- Out of 100 prospects contacted: ~41 respond, ~33 have real conversations,
+  ~23 attend meetings.
+- **2% of orgs say buying-signal tools actually determine account
+  assignment** — most teams have intent data but don't use it operationally.
+
+---
+
+# Customer outcomes library (cite ONE per email, max)
+
+Daniel should reference the customer whose situation best mirrors the
+prospect's industry / persona / pain. Never list multiple stats.
+
+## Marketing outcomes
+
+- **FireMon** (cybersecurity, enterprise): 80% increase in accounts engaged,
+  3x faster campaign launches, 54% faster opportunity close.
+- **OpenText** (enterprise software): scaled from 3 to 21 campaigns, 27%
+  new revenue in 30 days.
+- **Everbridge** (enterprise software): streamlined renewal engagement across
+  930+ accounts using a single intelligent workflow.
+- **Coveo** (enterprise SaaS): shifted from lead-based to ABM; 42 new
+  business opportunities in 9 months from ABM-influenced campaigns.
+- **Bonterra** (social-good software): $6M influenced pipeline (+445% YoY),
+  6,673 target accounts driven to website; ABM-aligned sales/marketing PODs.
+- **Hexagon** (manufacturing, enterprise): 459% lift in known-account
+  engagement (175 → 978 accounts), 1,379 active intent signals captured,
+  62% drop in disengaged accounts in 3 months — using stage-specific
+  intelligent workflows.
+- **Khoros** (CX SaaS, 2-person marketing team): 42% shorter sales cycle,
+  16% larger deals, 4x+ demo conversion rate on personalized site visits.
+- **Warren Rupp** (50-year-old pump manufacturer): 40% lift in lead quality,
+  2x marketing ROI starting Jan 2025.
+- **F12.net** (managed IT services, lean team): tripled weekly in-market
+  account engagement, doubled campaign velocity, hit full-year sales target
+  by June. Won 6sense Breakthrough '25 Small Team / Big Results.
+- **NanaWall** (manufacturer, opening glass walls): hyper-targeted dynamic
+  segments unified marketing + sales around account-level engagement scoring.
+
+## Sales outcomes
+
+- **Domo / Tableau / Dell** averages: up to 8x lift in opportunity open
+  rate, 2x win rate, 1.5–2x faster time to close.
+- **Cross-customer averages**: 2x increase in deal size, 20% better
+  conversions, 31% more opportunities.
+- **Flexera** (IT asset management): 82% pipeline lift from high-intent
+  accounts; 85% of target accounts engaged in 2 months.
+- **Service Express** (data-center services): 25% sales velocity
+  acceleration via 6sense-driven SDR strategy.
+- **Mission Cloud (CDW)** (AWS cloud services): 524 marketing-qualified
+  accounts, **$17M new pipeline**, $8.2M launched ARR in 6 months — using a
+  "Signal → Focus → Activation" timing-based migration campaign.
+- **Clari** (revenue platform): "Wake the Dead" closed-lost reactivation —
+  79% account CTR on display ads, 93% engagement rate, 5 qualified meetings
+  generating $1.1M pipeline (2x target).
+
+## AI Email Agent outcomes
+
+- **Vendavo** (pricing software): AI assistant "Lisa" delivered output
+  equivalent to **3 human SDRs**. 6-week pilot: 24 qualified contacts, 9
+  meetings, 2 opps. Full-year 2022: 66 qualified contacts, 19 meetings,
+  10 opps, **$3.3M pipeline**, 3x return vs. human BDRs.
+
+## RevOps outcomes
+
+- **Socure / LiveOps**: transformational pipeline results; "fastest
+  turnaround we've ever seen."
+
+---
+
+# Product talking points by persona
+
+## Marketing
+- Visibility into the 97% of buyer research that happens off-form, then
+  activation of that signal across ads / email / web / CRM.
+- Replace point tools: visitor ID + intent + enrichment + sequencer + ABM
+  orchestrator → one platform, one canvas.
+- AI Email Agents trigger personalized outreach on real-time activity.
+- Dynamic audiences that update as buyer behavior shifts (no rebuilding).
+- Single source of truth across LinkedIn, Google, Meta, CRM, MAP.
+
+## Sales
+- Know which accounts are in-market right now, before they fill a form.
+- See what they're researching → speak to their specific pain → higher ACV.
+- Get into deals before competitors (the 77%-win-rate first-mover advantage).
+- Sales Copilot surfaces account intelligence inside Salesforce / HubSpot.
+
+## RevOps
+- Auto-match contacts across CRM/MAP for accurate routing.
+- Flag bad/missing data in audience segments.
+- Enrich with technographics + psychographics for higher personalization.
+- Eliminates the stitched-together stack and the integration debt that goes
+  with it.
+
+---
+
+# Rules for using this context
 
 - **Never invent a customer.** Only cite logos / outcomes from this file.
-- **Never overload an email with stats.** Use one proof point max, only if it
-  directly reinforces the angle.
+- **Never overload an email with stats.** Use ONE proof point max, only if
+  it directly reinforces the angle.
 - **Never paste 6sense's marketing copy verbatim.** Daniel's voice always
   wins — re-phrase product capabilities the way Daniel actually talks
   (see tone.md).
+- **Match the customer outcome to the prospect.** Manufacturing prospect →
+  Hexagon, Warren Rupp, NanaWall. Lean team → F12.net, Khoros. Public-co
+  → Flexera, Service Express. AI Email Agents pitch → Vendavo. Cloud /
+  AWS partner → Mission Cloud.
+- **Match the strategic POV to the persona.** CMO / VP Marketing → POFC
+  shift, inbound failure, ABM tiers. CRO / Sales leader → BDR report stats,
+  77% first-shortlist win rate, multi-thread effect. RevOps → tool
+  consolidation, data hygiene.
 - **Common competitor framing:**
   - vs. point tools (Vector, RB2B, Clearbit, ZoomInfo intent, LeadForensics):
     "we replace the stitched-together stack — visitor ID + intent + enrichment
