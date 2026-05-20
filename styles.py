@@ -569,6 +569,16 @@ code, pre {
   background: oklch(68% 0.16 65);
 }
 
+/* Unknown date: neutral gray */
+.eia-age-tag.is-unknown {
+  background: oklch(95% 0.005 270);
+  color: oklch(48% 0.008 270);
+  border: 1px solid oklch(88% 0.006 270);
+}
+.eia-age-tag.is-unknown::before {
+  background: oklch(65% 0.01 270);
+}
+
 /* Backwards-compat alias kept for any older code paths */
 .eia-stale-tag {
   display: inline-flex;

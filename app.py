@@ -49,8 +49,15 @@ inject_styles()
 # ============================================================================
 with st.sidebar:
     st.markdown("### Signal")
-    has_key = bool(os.getenv("ANTHROPIC_API_KEY"))
-    status_pip("Anthropic — connected" if has_key else "Anthropic — missing", ok=has_key)
+    has_anthropic = bool(os.getenv("ANTHROPIC_API_KEY"))
+    status_pip("Anthropic — connected" if has_anthropic else "Anthropic — missing", ok=has_anthropic)
+    has_tavily = bool(os.getenv("TAVILY_API_KEY"))
+    status_pip("Tavily — connected" if has_tavily else "Tavily — missing", ok=has_tavily)
+    if not has_tavily:
+        st.caption(
+            "Get a free Tavily key at tavily.com — 1000 searches/mo, "
+            "no card. Required for research."
+        )
 
     st.markdown("### Profile")
     profiles = list_profiles()
@@ -140,6 +147,29 @@ with draft_tab:
                 f"<span style='color:var(--fg-2);'>{tag}</span></p>",
                 unsafe_allow_html=True,
             )
+
+            # Surface a clear warning when the model returned 0 insights, with
+            # the raw output for debugging. Also offer a re-research button.
+            if not brief.get("insights"):
+                st.warning(
+                    "The model returned 0 insights. This is usually a prompt-restriction "
+                    "issue, not a 'no recent activity' reality. Try re-researching, or "
+                    "expand the raw output below to see what the model actually said."
+                )
+                cols = st.columns([1, 4])
+                if cols[0].button("Re-research", use_container_width=True):
+                    with st.spinner("Re-researching with cache bypassed"):
+                        try:
+                            brief = generate_brief(website, force_refresh=True)
+                            st.session_state["brief"] = brief
+                            st.rerun()
+                        except Exception as e:
+                            st.error(f"Re-research failed: {e}")
+                            st.stop()
+                with st.expander("Raw model output"):
+                    st.text(brief.get("_raw", "(no raw output captured)"))
+                st.stop()
+
             st.caption("Select the insights to anchor the email on.")
 
             grouped = insights_by_bucket(brief)
@@ -177,6 +207,13 @@ with draft_tab:
                                         f'title="Within the last 6 months.">'
                                         f'{label}</span>'
                                     )
+                            else:
+                                age_html = (
+                                    '<span class="eia-age-tag is-unknown" '
+                                    'title="Source date could not be confirmed. '
+                                    'Verify recency before referencing.">'
+                                    'no date found</span>'
+                                )
                             st.markdown(
                                 f"<div style='font-size:0.9rem; font-weight:500; "
                                 f"line-height:1.4; color:var(--fg); margin-bottom:0.15rem;'>"
@@ -234,10 +271,26 @@ with draft_tab:
 
             with st.expander("Hyper-personalize with LinkedIn"):
                 linkedin_text = st.text_area(
-                    "Paste LinkedIn About / Experience / recent posts",
+                    "Paste profile TEXT (About, Activity / Posts, Featured) "
+                    "— URLs alone won't work, LinkedIn blocks scraping",
                     height=180,
                     label_visibility="collapsed",
                 )
+                # Warn if user pasted just a URL — that does nothing.
+                _stripped = linkedin_text.strip()
+                if _stripped and len(_stripped) < 200 and (
+                    _stripped.startswith("http") or "linkedin.com/" in _stripped
+                ):
+                    st.warning(
+                        "That looks like just a LinkedIn URL. The drafter can't fetch "
+                        "the page (LinkedIn blocks scraping). Open the profile in your "
+                        "browser, copy the **About** section, then the **Activity / Posts** "
+                        "tab content (especially recent posts), and paste that text here. "
+                        "Without text content, the LinkedIn hook will be skipped."
+                    )
+                    # Don't pass the URL through — the model will ignore it anyway,
+                    # and clearing it removes the false "mandatory LinkedIn use" signal.
+                    linkedin_text = ""
 
             extra_notes = st.text_area("Notes (optional)", "", height=70)
 
