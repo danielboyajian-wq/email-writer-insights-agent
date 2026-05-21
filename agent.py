@@ -3,7 +3,9 @@
 Single tone, loaded from tones/tone.md. Tone block is prompt-cached.
 """
 
+import json
 import os
+import re
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -280,3 +282,195 @@ def draft_email(req: DraftRequest) -> tuple[str, dict]:
         "cache_write": getattr(response.usage, "cache_creation_input_tokens", 0),
     }
     return text, usage
+
+
+# ============================================================================
+# 6-email cadence
+# ============================================================================
+
+CADENCE_INSTRUCTIONS = """You are now writing a 6-EMAIL CADENCE in one go, not a single email.
+
+Same hard constraints as a single email apply to EVERY message: tone, no salesy
+phrasing, no preamble fluff, no generic CTAs, all the bans in the base system
+prompt. Each message must read like Daniel wrote it.
+
+# Thread structure
+
+The cadence is two threads of three messages each.
+
+- **Thread 1 = emails 1, 2, 3.** Email 1 has a fresh subject line. Emails 2
+  and 3 are REPLIES in that same thread — their subject is `Re: <email 1's subject>`.
+- **Thread 2 = emails 4, 5, 6.** Email 4 has a FRESH subject line — short,
+  factual, lowercase, matches Daniel's style (NOT salesy, NOT a different
+  rhetorical register from email 1's subject — same straight-to-the-point
+  voice, just different angle). Emails 5 and 6 are REPLIES — their subject
+  is `Re: <email 4's subject>`.
+
+# Per-email framework
+
+## Email 1 — Insight-based opener (the existing single-email format)
+Same as a one-off cold email: hook on the strongest selected insight (or
+LinkedIn personal detail if provided), connect to what likely matters for
+this persona, plain explanation of how 6sense connects, persona-anchored CTA.
+
+## Email 2 — Customer story tied back to original pain
+Lead with one short framing line (e.g. "Sharing this customer story I thought
+you'd find relevant."). Then a customer story from the company_context.md
+customer outcomes library, picked to match the prospect's industry / persona
+/ situation. Use 2-3 quantified bullet points from that customer's results.
+End by tying it back to the SAME pain/insight you opened email 1 with — show
+how the story is directly relevant to what they're navigating.
+
+## Email 3 — Short bump
+Very short, in-thread reply. 1-3 sentences max. Something like
+"Bumping this in case it got buried, any thoughts?" or "Circling back —
+totally opposed to grabbing some time in the coming weeks?" Adapt to tone.
+NO new pitch, NO new value prop, just a polite nudge.
+
+## Email 4 — Industry observation + tie back to original insights
+Opens with what you're hearing from peer leaders in their persona's function
+(sales / marketing / revops). Format: "Been hearing {specific issue
+relevant to this persona's role} come up a lot in conversations with
+{persona} leaders. Curious how you're going about that this year."
+Then connect: "I'm sure that on top of {reference the original insights /
+changes at their company that we opened with in email 1} has put a lot on
+your plate." Close with a CTA on how 6sense could help with both. New
+subject line (fresh thread), Daniel-tone — short, factual, lowercase.
+
+## Email 5 — Value-add (your discretion)
+Pick what fits best given the prospect: a relevant blog post, another
+customer story not used in email 2, a piece of industry research from the
+Science of B2B library in company_context.md, OR (if value-add doesn't fit)
+a short industry-trend message specific to their persona. Default to value-
+add. Whatever you pick, keep it short and useful — not a re-pitch.
+
+## Email 6 — Breakup
+Polite close. Acknowledge they may be busy, ask if there's a better time
+or another person on the team to connect with. Soft, no guilt-trip.
+Example structure (don't copy verbatim):
+"Hey {first_name},
+Seems like you've been busy — is there a better time to reach out or
+someone else on the {company} team I should connect with? Open to
+exploring this a bit more? All good if not.
+Best,"
+
+# Output format
+
+Return ONLY a single JSON object inside one ```json fenced block, no prose
+before or after. Schema:
+
+{
+  "emails": [
+    {
+      "position": 1,
+      "thread": 1,
+      "purpose": "insight-opener",
+      "subject": "<subject line — short, factual, lowercase preferred>",
+      "body": "<the email body, including greeting and sign-off>"
+    },
+    {
+      "position": 2,
+      "thread": 1,
+      "purpose": "customer-story",
+      "subject": "Re: <email 1's subject verbatim>",
+      "body": "<...>"
+    },
+    {
+      "position": 3,
+      "thread": 1,
+      "purpose": "bump",
+      "subject": "Re: <email 1's subject verbatim>",
+      "body": "<...>"
+    },
+    {
+      "position": 4,
+      "thread": 2,
+      "purpose": "industry-observation",
+      "subject": "<fresh subject — Daniel's style, short and factual>",
+      "body": "<...>"
+    },
+    {
+      "position": 5,
+      "thread": 2,
+      "purpose": "value-add",
+      "subject": "Re: <email 4's subject verbatim>",
+      "body": "<...>"
+    },
+    {
+      "position": 6,
+      "thread": 2,
+      "purpose": "breakup",
+      "subject": "Re: <email 4's subject verbatim>",
+      "body": "<...>"
+    }
+  ]
+}
+
+Coherence requirement: when writing email 4, you can reference the same
+insight you anchored on in email 1 (re-frame, don't repeat verbatim). When
+writing email 2, the customer story must directly support the pain you set
+up in email 1. The cadence must read as a coherent sequence, not 6 random
+messages stapled together.
+"""
+
+
+def _parse_cadence(text: str) -> dict:
+    """Extract the cadence JSON. Forgiving on fenced/unfenced output."""
+    m = re.search(r"```(?:json)?\s*(\{.*?\})\s*```", text, re.DOTALL)
+    raw = m.group(1) if m else None
+    if not raw:
+        m = re.search(r"(\{.*\})", text, re.DOTALL)
+        raw = m.group(1) if m else None
+    if not raw:
+        return {"emails": [], "_error": "no JSON found", "_raw": text}
+    try:
+        data = json.loads(raw)
+    except json.JSONDecodeError as e:
+        return {"emails": [], "_error": str(e), "_raw": text}
+    data.setdefault("emails", [])
+    return data
+
+
+def draft_cadence(req: DraftRequest) -> tuple[dict, dict]:
+    """Generate all 6 cadence emails in one Claude call.
+
+    Returns (cadence_dict, usage_stats). cadence_dict has shape:
+        {"emails": [{position, thread, purpose, subject, body}, ...]}
+    """
+    client = anthropic.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
+
+    # System = base prompt + cadence appendix + (cached) company context + tone
+    base_system_with_cadence = SYSTEM_PROMPT_BASE + "\n\n---\n\n" + CADENCE_INSTRUCTIONS
+    system = [
+        {"type": "text", "text": base_system_with_cadence},
+        {
+            "type": "text",
+            "text": (
+                f"# COMPANY CONTEXT — what we sell, never invent claims outside this\n\n"
+                f"{load_company_context()}\n\n---\n\n"
+                f"# TONE — match this exactly\n\n{load_tone(req.profile_slug)}"
+            ),
+            "cache_control": {"type": "ephemeral", "ttl": "1h"},
+        },
+    ]
+
+    user_msg = _build_user_message(req) + (
+        "\n\n# CADENCE MODE\n"
+        "Generate ALL 6 emails per the framework above. Return JSON only."
+    )
+
+    response = client.messages.create(
+        model=MODEL,
+        max_tokens=6000,  # 6 emails + JSON overhead
+        system=system,
+        messages=[{"role": "user", "content": user_msg}],
+    )
+    text = next((b.text for b in response.content if b.type == "text"), "")
+    cadence = _parse_cadence(text)
+    usage = {
+        "input_tokens": response.usage.input_tokens,
+        "output_tokens": response.usage.output_tokens,
+        "cache_read": getattr(response.usage, "cache_read_input_tokens", 0),
+        "cache_write": getattr(response.usage, "cache_creation_input_tokens", 0),
+    }
+    return cadence, usage

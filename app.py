@@ -7,7 +7,7 @@ from dotenv import load_dotenv
 
 load_dotenv(override=True)
 
-from agent import DraftRequest, draft_email
+from agent import DraftRequest, draft_cadence, draft_email
 import history
 from insights import (
     BUCKETS,
@@ -364,10 +364,19 @@ with draft_tab:
 
             extra_notes = st.text_area("Notes (optional)", "", height=70)
 
+            # Output mode toggle — single email vs full 6-email cadence
+            mode = st.radio(
+                "Output",
+                options=["Single email", "6-email cadence"],
+                horizontal=True,
+                key="output_mode",
+            )
+
             draft_col, _ = st.columns([1, 4])
             with draft_col:
+                go_label = "Draft email" if mode == "Single email" else "Draft cadence"
                 go = st.button(
-                    "Draft email",
+                    go_label,
                     type="primary",
                     disabled=not selected,
                     use_container_width=True,
@@ -385,19 +394,82 @@ with draft_tab:
                     linkedin_text=linkedin_text,
                     extra_notes=extra_notes,
                 )
-                with st.spinner("Drafting in your voice."):
-                    try:
-                        text, usage = draft_email(req)
-                    except Exception as e:
-                        st.error(f"Draft failed: {e}")
+
+                if mode == "Single email":
+                    with st.spinner("Drafting in your voice."):
+                        try:
+                            text, usage = draft_email(req)
+                        except Exception as e:
+                            st.error(f"Draft failed: {e}")
+                            st.stop()
+                    section_head("04", "Output")
+                    render_email_output(text)
+                    st.caption(
+                        f"in {usage['input_tokens']}  ·  out {usage['output_tokens']}  ·  "
+                        f"cache read {usage['cache_read']}  ·  cache write {usage['cache_write']}"
+                    )
+                else:
+                    with st.spinner("Drafting all 6 emails in your voice (~30s)."):
+                        try:
+                            cadence, usage = draft_cadence(req)
+                        except Exception as e:
+                            st.error(f"Cadence failed: {e}")
+                            st.stop()
+
+                    section_head("04", "Cadence")
+
+                    if cadence.get("_error"):
+                        st.warning(f"Could not parse cadence JSON: {cadence['_error']}")
+                        with st.expander("Raw model output"):
+                            st.text(cadence.get("_raw", ""))
                         st.stop()
 
-                section_head("04", "Output")
-                render_email_output(text)
-                st.caption(
-                    f"in {usage['input_tokens']}  ·  out {usage['output_tokens']}  ·  "
-                    f"cache read {usage['cache_read']}  ·  cache write {usage['cache_write']}"
-                )
+                    emails = sorted(
+                        cadence.get("emails", []),
+                        key=lambda e: e.get("position", 0),
+                    )
+                    if not emails:
+                        st.warning("No emails returned.")
+                        st.stop()
+
+                    # Render emails grouped by thread
+                    current_thread = None
+                    for em in emails:
+                        thr = em.get("thread", 1)
+                        if thr != current_thread:
+                            st.markdown(
+                                f"<div style='font-family:var(--font); font-size:0.72rem; "
+                                f"font-weight:600; letter-spacing:0.06em; text-transform:uppercase; "
+                                f"color:var(--fg-2); margin:1.4rem 0 0.5rem;'>"
+                                f"Thread {thr}</div>",
+                                unsafe_allow_html=True,
+                            )
+                            current_thread = thr
+                        # Header strip for each email
+                        st.markdown(
+                            f"<div style='display:flex; align-items:baseline; gap:0.6rem; "
+                            f"margin:0.5rem 0 0.25rem;'>"
+                            f"<span style='font-family:var(--font); font-size:0.78rem; "
+                            f"font-weight:600; color:var(--fg);'>Email {em.get('position')}</span>"
+                            f"<span style='font-family:var(--font); font-size:0.72rem; "
+                            f"color:var(--fg-2);'>· {em.get('purpose', '').replace('-', ' ')}</span>"
+                            f"</div>",
+                            unsafe_allow_html=True,
+                        )
+                        # Subject line
+                        st.markdown(
+                            f"<div style='font-family:var(--font); font-size:0.82rem; "
+                            f"color:var(--fg-1); margin-bottom:0.35rem;'>"
+                            f"<span style='color:var(--fg-2);'>Subject:</span> "
+                            f"<span style='font-weight:500;'>{em.get('subject', '')}</span></div>",
+                            unsafe_allow_html=True,
+                        )
+                        render_email_output(em.get("body", ""))
+
+                    st.caption(
+                        f"in {usage['input_tokens']}  ·  out {usage['output_tokens']}  ·  "
+                        f"cache read {usage['cache_read']}  ·  cache write {usage['cache_write']}"
+                    )
 
 # ----------------------------------------------------------------------------
 # PROFILES TAB
