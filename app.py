@@ -8,6 +8,7 @@ from dotenv import load_dotenv
 load_dotenv(override=True)
 
 from agent import DraftRequest, draft_email
+import history
 from insights import (
     BUCKETS,
     generate_brief,
@@ -58,6 +59,13 @@ with st.sidebar:
             "Get a free Tavily key at tavily.com — 1000 searches/mo, "
             "no card. Required for research."
         )
+    has_db = history.is_enabled()
+    status_pip("History — connected" if has_db else "History — disabled", ok=has_db)
+    if not has_db:
+        st.caption(
+            "Set DATABASE_URL (Neon free tier works) to save and "
+            "browse past research."
+        )
 
     st.markdown("### Profile")
     profiles = list_profiles()
@@ -86,6 +94,56 @@ with st.sidebar:
                 del st.session_state[k]
         st.rerun()
 
+    # --- Saved companies (per-profile history) ---
+    if active_profile and history.is_enabled():
+        st.markdown("### Saved companies")
+        profile_label = names.get(active_profile, active_profile)
+        with st.expander(f"📁 {profile_label}'s history", expanded=False):
+            search_q = st.text_input(
+                "Search",
+                key="history_search",
+                placeholder="Filter by name or domain",
+                label_visibility="collapsed",
+            )
+            saved = history.list_briefs(active_profile, search=search_q or "")
+            if not saved:
+                st.caption("No saved research yet." if not search_q else "No matches.")
+            else:
+                st.caption(f"{len(saved)} saved")
+                for sb in saved[:50]:
+                    age = history.age_days(sb)
+                    cls = history.staleness_class(sb)
+                    age_color = {
+                        "fresh": "var(--success, oklch(62% 0.13 160))",
+                        "aging": "oklch(68% 0.13 75)",
+                        "stale": "oklch(58% 0.18 25)",
+                    }[cls]
+                    age_label = f"{age}d" if age < 14 else (f"{age}d" if age < 30 else "stale")
+
+                    cols = st.columns([0.78, 0.22])
+                    if cols[0].button(
+                        sb.company_name,
+                        key=f"load_{sb.url}",
+                        use_container_width=True,
+                        help=f"Researched {sb.researched_at.date().isoformat()}",
+                    ):
+                        # Restore brief + URL into session so the Draft tab
+                        # renders as if we just researched.
+                        st.session_state["brief"] = sb.brief
+                        st.session_state["website"] = sb.url
+                        st.session_state["loaded_from_history"] = True
+                        st.rerun()
+                    if cols[1].button("×", key=f"del_{sb.url}", help="Delete"):
+                        history.delete_brief(active_profile, sb.url)
+                        st.rerun()
+                    # Age indicator
+                    st.markdown(
+                        f"<div style='margin:-0.4rem 0 0.3rem 0.2rem;'>"
+                        f"<span style='font-family:var(--font); font-size:0.7rem; "
+                        f"color:{age_color};'>● {age_label}</span></div>",
+                        unsafe_allow_html=True,
+                    )
+
 # ============================================================================
 # MAIN
 # ============================================================================
@@ -106,18 +164,26 @@ with draft_tab:
 
         website = st.text_input(
             "Company website",
+            value=st.session_state.get("website", ""),
             placeholder="acme.com",
             label_visibility="collapsed",
+            key="website_input",
         )
+        # Keep session_state["website"] in sync with whatever's typed
+        st.session_state["website"] = website
 
-        run_col, _ = st.columns([1, 4])
+        run_col, reload_col = st.columns([1, 4])
         with run_col:
-            run = st.button("Run research", type="primary", disabled=not website, use_container_width=True)
+            run = st.button(
+                "Run research", type="primary",
+                disabled=not website, use_container_width=True,
+            )
         if run:
             with st.spinner("Reading homepage, searching news, synthesizing (~15s)"):
                 try:
-                    brief = generate_brief(website)
+                    brief = generate_brief(website, profile_slug=active_profile)
                     st.session_state["brief"] = brief
+                    st.session_state.pop("loaded_from_history", None)
                 except Exception as e:
                     st.error(f"Research failed: {e}")
                     st.stop()
@@ -160,7 +226,11 @@ with draft_tab:
                 if cols[0].button("Re-research", use_container_width=True):
                     with st.spinner("Re-researching with cache bypassed"):
                         try:
-                            brief = generate_brief(website, force_refresh=True)
+                            brief = generate_brief(
+                                website,
+                                force_refresh=True,
+                                profile_slug=active_profile,
+                            )
                             st.session_state["brief"] = brief
                             st.rerun()
                         except Exception as e:

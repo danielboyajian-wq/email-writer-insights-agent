@@ -24,6 +24,7 @@ except ImportError:  # pragma: no cover
     TavilyClient = None  # type: ignore
 
 from cache import cache_brief, get_cached_brief
+import history
 
 MODEL = "claude-sonnet-4-6"
 
@@ -289,12 +290,17 @@ def _format_search_results_for_prompt(results: dict[str, list[dict]]) -> str:
     return "\n\n".join(blocks)
 
 
-def generate_brief(website_url: str, force_refresh: bool = False) -> dict:
+def generate_brief(
+    website_url: str,
+    force_refresh: bool = False,
+    profile_slug: Optional[str] = None,
+) -> dict:
     """Tavily search (parallel) + single Claude synthesis call. ~5-10s total.
 
     Tavily provides date-filtered, pre-recent search results. Claude only
     synthesizes — no agentic loop, no slow server-side searches. Results
-    are cached on disk for 24 hours per normalized domain.
+    are cached on disk for 24 hours per normalized domain, and if
+    `profile_slug` is set, also persisted to Postgres history.
     """
     domain = root_domain(website_url)
 
@@ -368,6 +374,9 @@ def generate_brief(website_url: str, force_refresh: bool = False) -> dict:
 
     if brief.get("insights"):
         cache_brief(domain, brief)
+        # Persist to per-profile history (no-op if DB unavailable).
+        if profile_slug:
+            history.save_brief(profile_slug, domain, company_name, brief)
     else:
         brief["_raw"] = text
         brief["_warning"] = "Model returned 0 insights (after cutoff filter)."
