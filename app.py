@@ -331,7 +331,6 @@ with draft_tab:
                 index=default_idx,
                 format_func=lambda s: PERSONAS[s].label,
             )
-            st.caption(PERSONAS[persona_slug].priorities)
 
             your_pitch = st.text_area(
                 "Your angle",

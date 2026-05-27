@@ -723,6 +723,25 @@ def status_pip(label: str, ok: bool = True) -> None:
 
 
 def render_email_output(text: str) -> None:
+    """Render an email body. Escapes HTML, neutralises Streamlit's LaTeX
+    rendering of `$...$`, and converts markdown-style links `[text](url)`
+    into clickable anchors. Preserves whitespace via CSS `pre-wrap`.
+    """
     import html as _html
+    import re as _re
+
     safe = _html.escape(text)
+    # Streamlit's markdown processor parses `$...$` as KaTeX, which turns
+    # numbers like "$475M" into serif/italic math glyphs. Use the HTML
+    # entity so the dollar sign renders as a plain character.
+    safe = safe.replace("$", "&#36;")
+
+    # Convert `[label](https://...)` to a real anchor. html.escape leaves
+    # brackets and parens intact, so the pattern still matches post-escape.
+    link_re = _re.compile(r'\[([^\]]+)\]\((https?://[^)\s]+)\)')
+    safe = link_re.sub(
+        r'<a href="\2" target="_blank" rel="noopener">\1</a>',
+        safe,
+    )
+
     st.markdown(f'<div class="eia-output">{safe}</div>', unsafe_allow_html=True)

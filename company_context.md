@@ -58,8 +58,16 @@ INFUSE.
 - **Signal scale.** ~1T signals/day; the data depth is hard to replicate.
 - **Action, not just data.** AI agents and intelligent workflows actually
   execute — they don't just hand reps a list.
-- **Recognized leader.** 6sense was named a Leader in *The Forrester Wave™:
-  Revenue Marketing Platforms for B2B, Q1 2026.*
+- **Triple-analyst leadership** (use the right one for the persona):
+  - **Forrester Wave™: Revenue Marketing Platforms for B2B, Q1 2026 — Leader.**
+    Highest possible scores in 14 criteria. "Among the most complete in this
+    evaluation." Best for: marketing leaders.
+  - **Forrester Wave™: B2B Intent Data Providers, Q1 2025 — Leader.**
+    10x intent coverage vs. competitors. Top scores on identity resolution
+    and noise filtering. Best for: RevOps and data-quality conversations.
+  - **Gartner Magic Quadrant for ABM Platforms — Leader, 5 years running.**
+    Highest position for Ability to Execute. Best for: any persona, especially
+    when a buyer mentions Gartner.
 
 ---
 
@@ -105,6 +113,32 @@ to a prospect's pain.
   progression, buying-stage movement, and pipeline at the account level**.
 - Buying committees are **11+ stakeholders**. Individual lead scores don't
   represent account momentum.
+
+## Forrester 2026 predictions (cite when talking to senior marketing / sales / RevOps leaders)
+
+- **Ungoverned GenAI in commercial apps will cost B2B companies $10B+.**
+  Stock declines, legal settlements, regulatory fines. Governance and
+  signal-quality become the safer AI bet.
+- **Decentralized content creation: two-thirds of content will come from
+  outside centralized marketing teams.** New guardrails needed.
+- **75% of enterprise B2B will increase influencer-relations budgets.**
+  External voices (analysts, SMEs) gain influence in AI-powered discovery.
+- **Large-scale events under pressure** — leaders are reimagining event ROI.
+- **Trust gets tested** — the through-line of the 2026 predictions for
+  marketing, sales, and product leaders.
+
+## What mid-market marketing leaders specifically face (Heinz research)
+
+- 48% cite **budget / headcount cuts as the #1 challenge**. Teams of 2-10
+  expected to scale without proportional investment.
+- ~90% can't confidently connect marketing to closed-won revenue. Kills
+  credibility in CFO conversations.
+- 63% struggle to reach the right buyers and cover full buying groups.
+- 44% rank sales-marketing alignment as a top challenge — but most have
+  surface-level collaboration, not operationalized revenue process.
+- Momentum loss after Q1: teams go reactive instead of strategic.
+- The strongest performers focus on orchestration; the struggling ones
+  optimize tactics in isolation.
 
 ## What 6sense believes about BDRs (2026 State of BDR Report)
 
@@ -209,6 +243,36 @@ prospect's industry / persona / pain. Never list multiple stats.
 - Enrich with technographics + psychographics for higher personalization.
 - Eliminates the stitched-together stack and the integration debt that goes
   with it.
+
+---
+
+# Customer story URL map (for hyperlinking the customer name)
+
+When you reference a customer in email 2 or email 5, wrap the customer
+name in a markdown link `[Name](URL)` so it renders as a clickable link
+in the email. Use these canonical URLs:
+
+- [FireMon](https://6sense.com/customer-stories/how-firemon-scaled-abm-operations-from-10-to-100-accounts-and-launched-campaigns-3x-faster-with-6sense/)
+- [OpenText](https://6sense.com/customer-stories/opentext-scales-from-3-to-21-campaigns-with-27-new-revenue-in-30-days/)
+- [Everbridge](https://6sense.com/customer-stories/how-everbridge-streamlined-renewal-engagement-across-930-accounts-annually-using-a-single-6sense-intelligent-workflow/)
+- [Coveo](https://6sense.com/customer-stories/how-coveo-transformed-their-targeting-and-gtm-strategy-using-6sense/)
+- [Bonterra](https://6sense.com/customer-stories/bonterras-journey-with-6sense-transforming-abm-with-predictive-ai-and-sales-alignment/)
+- [Hexagon](https://6sense.com/customer-stories/hexagon-turns-email-into-a-revenue-machine-stage-specific-abm-with-6sense-intelligent-workflows/)
+- [Khoros](https://6sense.com/customer-stories/khoros-delivers-personalized-web-experiences-to-their-most-valuable-audiences/)
+- [Warren Rupp](https://6sense.com/customer-stories/warren-rupp-refines-targeting-and-boosts-lead-quality-by-40-with-6sense-real-time-insights/)
+- [F12.net](https://6sense.com/customer-stories/f12-nets-lean-marketing-team-drives-award-winning-growth-with-6sense/)
+- [NanaWall](https://6sense.com/customer-stories/manufacturer-nanawall-gains-the-competitive-edge-with-6sense/)
+- [Flexera](https://6sense.com/customer-stories/flexera-drives-82-pipeline-lift-from-high-intent-accounts-with-6sense/)
+- [Service Express](https://6sense.com/customer-stories/service-express-accelerates-sales-velocity-by-25-with-6sense-driven-sdr-strategy/)
+- [Mission Cloud](https://6sense.com/customer-stories/how-mission-cloud-a-cdw-company-turned-intent-signals-into-pipeline-wins-with-a-timing-based-migration-campaign/)
+- [Clari](https://6sense.com/customer-stories/wake-the-dead-how-clari-used-6sense-display-ads-to-win-back-lost-accounts/)
+- [Vendavo](https://6sense.com/customer-stories/conversational-email-the-compass-in-vendavos-tech-stack/)
+- [Socure](https://6sense.com/customer-stories/how-socures-treasure-ops-unlocked-transformational-pipeline-results/)
+- [INFUSE](https://6sense.com/customer-stories/infuse-wins-technology-partner-of-the-year-at-breakthrough25/)
+- [JAGGAER](https://6sense.com/customer-stories/6sense-agency-partner-of-the-year-2x-marketing-jaggaer-how-the-winning-trifecta-slayed-sdr-backlogs-and-turned-tiny-ad-budgets-into-pipeline-rocket-fuel/)
+
+Use the markdown link form exactly. The UI converts it to a clickable
+anchor on render.
 
 ---
 
