@@ -9,6 +9,7 @@ load_dotenv(override=True)
 
 from agent import DraftRequest, draft_cadence, draft_email
 import history
+from intent import synthesize_intent
 from insights import (
     BUCKETS,
     generate_brief,
@@ -127,10 +128,14 @@ with st.sidebar:
                         use_container_width=True,
                         help=f"Researched {sb.researched_at.date().isoformat()}",
                     ):
-                        # Restore brief + URL into session so the Draft tab
-                        # renders as if we just researched.
+                        # Restore brief + URL + any saved intent context so
+                        # the Draft tab renders as if we just researched.
+                        # Write to the same keys the widgets use so the
+                        # text areas pre-fill on rerender.
                         st.session_state["brief"] = sb.brief
                         st.session_state["website"] = sb.url
+                        st.session_state["intent_data_input"] = sb.intent_data
+                        st.session_state["intent_synthesis_input"] = sb.intent_synthesis
                         st.session_state["loaded_from_history"] = True
                         st.rerun()
                     if cols[1].button("×", key=f"del_{sb.url}", help="Delete"):
@@ -184,6 +189,9 @@ with draft_tab:
                     brief = generate_brief(website, profile_slug=active_profile)
                     st.session_state["brief"] = brief
                     st.session_state.pop("loaded_from_history", None)
+                    # Fresh research = clear stale intent context from prior prospect.
+                    st.session_state["intent_data_input"] = ""
+                    st.session_state["intent_synthesis_input"] = ""
                 except Exception as e:
                     st.error(f"Research failed: {e}")
                     st.stop()
@@ -315,8 +323,78 @@ with draft_tab:
 
             st.session_state["selected_insights"] = selected
 
-            # --- §03 Draft ---
-            section_head("03", "Compose")
+            # --- §03 Intent signals (optional, additive supporting context) ---
+            section_head("03", "Intent signals", note="optional")
+            st.caption(
+                "Paste 6sense intent data (keywords and pages visited). The drafter "
+                "uses this as a secondary 'also noticed' line, NOT the main anchor "
+                "of the email. Insights stay the primary hook."
+            )
+
+            intent_data = st.text_area(
+                "Paste intent data",
+                placeholder=(
+                    "Keywords: ABM platform, intent data providers, account-based "
+                    "marketing tools\nPages visited: /platform/intent-data/, "
+                    "/customer-stories/firemon, /pricing\n..."
+                ),
+                height=140,
+                label_visibility="collapsed",
+                key="intent_data_input",
+            )
+
+            ai_col, _ = st.columns([1, 4])
+            with ai_col:
+                analyze = st.button(
+                    "Analyze",
+                    disabled=not intent_data.strip(),
+                    use_container_width=True,
+                )
+            if analyze:
+                with st.spinner("Synthesizing intent context"):
+                    try:
+                        synth = synthesize_intent(
+                            intent_text=intent_data,
+                            brief=brief,
+                            company=website,
+                            persona_label="",
+                        )
+                    except Exception as e:
+                        st.error(f"Synthesis failed: {e}")
+                        synth = None
+                if synth:
+                    # Write to the SAME key the widget uses, then rerun so the
+                    # text area re-renders with the new initial value. This is
+                    # the only reliable Streamlit pattern for programmatically
+                    # populating a keyed widget after the fact.
+                    st.session_state["intent_synthesis_input"] = synth
+                    st.rerun()
+
+            intent_synthesis = st.text_area(
+                "Intent context (edit before drafting)",
+                height=110,
+                placeholder=(
+                    "Click Analyze to generate, or write your own. The drafter "
+                    "uses this as a SECONDARY 'also noticed' line, not the lead."
+                ),
+                key="intent_synthesis_input",
+            )
+
+            # Persist intent + synthesis to history when populated. Best-effort;
+            # silent on DB errors so the draft flow is never blocked.
+            if active_profile and (intent_data or intent_synthesis):
+                try:
+                    history.update_intent(
+                        profile_slug=active_profile,
+                        url=website,
+                        intent_data=intent_data,
+                        intent_synthesis=intent_synthesis,
+                    )
+                except Exception:
+                    pass
+
+            # --- §04 Draft ---
+            section_head("04", "Compose")
 
             c1, c2 = st.columns(2)
             recipient_name = c1.text_input("Recipient name", "", placeholder="Jane Doe")
@@ -392,6 +470,8 @@ with draft_tab:
                     profile_slug=active_profile,
                     linkedin_text=linkedin_text,
                     extra_notes=extra_notes,
+                    intent_data=intent_data,
+                    intent_synthesis=intent_synthesis,
                 )
 
                 if mode == "Single email":
@@ -401,7 +481,7 @@ with draft_tab:
                         except Exception as e:
                             st.error(f"Draft failed: {e}")
                             st.stop()
-                    section_head("04", "Output")
+                    section_head("05", "Output")
                     render_email_output(text)
                     st.caption(
                         f"in {usage['input_tokens']}  ·  out {usage['output_tokens']}  ·  "
@@ -415,7 +495,7 @@ with draft_tab:
                             st.error(f"Cadence failed: {e}")
                             st.stop()
 
-                    section_head("04", "Cadence")
+                    section_head("05", "Cadence")
 
                     if cadence.get("_error"):
                         st.warning(f"Could not parse cadence JSON: {cadence['_error']}")

@@ -12,3 +12,4 @@ examples/
 profiles/.write.lock
 profiles/*/*.tmp
 .cache/
+.claude/settings.local.json

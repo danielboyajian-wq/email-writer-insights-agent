@@ -41,6 +41,10 @@ CREATE TABLE IF NOT EXISTS briefs (
 );
 CREATE INDEX IF NOT EXISTS idx_briefs_profile_recent
   ON briefs(profile_slug, researched_at DESC);
+
+-- Forward-compatible: add intent fields if they don't exist yet.
+ALTER TABLE briefs ADD COLUMN IF NOT EXISTS intent_data TEXT;
+ALTER TABLE briefs ADD COLUMN IF NOT EXISTS intent_synthesis TEXT;
 """
 
 _SCHEMA_READY = False  # set once after init_schema() succeeds
@@ -53,6 +57,8 @@ class SavedBrief:
     company_name: str
     brief: dict
     researched_at: datetime
+    intent_data: str = ""
+    intent_synthesis: str = ""
 
 
 def is_enabled() -> bool:
@@ -90,8 +96,19 @@ def init_schema() -> bool:
         return False
 
 
-def save_brief(profile_slug: str, url: str, company_name: str, brief: dict) -> bool:
-    """Upsert a brief for (profile, url). Latest research replaces previous."""
+def save_brief(
+    profile_slug: str,
+    url: str,
+    company_name: str,
+    brief: dict,
+    intent_data: str = "",
+    intent_synthesis: str = "",
+) -> bool:
+    """Upsert a brief for (profile, url). Latest research replaces previous.
+
+    intent_data + intent_synthesis are optional. When provided they overwrite
+    whatever was previously stored for this (profile, url).
+    """
     if not is_enabled():
         return False
     if not init_schema():
@@ -105,20 +122,78 @@ def save_brief(profile_slug: str, url: str, company_name: str, brief: dict) -> b
         with _conn() as c, c.cursor() as cur:
             cur.execute(
                 """
-                INSERT INTO briefs (profile_slug, url, company_name, brief_json, researched_at)
-                VALUES (%s, %s, %s, %s, now())
+                INSERT INTO briefs (
+                    profile_slug, url, company_name, brief_json,
+                    intent_data, intent_synthesis, researched_at
+                )
+                VALUES (%s, %s, %s, %s, %s, %s, now())
                 ON CONFLICT (profile_slug, url)
                 DO UPDATE SET
-                  company_name = EXCLUDED.company_name,
-                  brief_json   = EXCLUDED.brief_json,
-                  researched_at = now()
+                  company_name     = EXCLUDED.company_name,
+                  brief_json       = EXCLUDED.brief_json,
+                  intent_data      = EXCLUDED.intent_data,
+                  intent_synthesis = EXCLUDED.intent_synthesis,
+                  researched_at    = now()
                 """,
-                (profile_slug, url, company_name, json.dumps(clean)),
+                (
+                    profile_slug, url, company_name, json.dumps(clean),
+                    intent_data or None, intent_synthesis or None,
+                ),
             )
         return True
     except Exception as e:
         log.warning("history save_brief failed: %s", e)
         return False
+
+
+def update_intent(
+    profile_slug: str,
+    url: str,
+    intent_data: str,
+    intent_synthesis: str,
+) -> bool:
+    """Write or replace just the intent fields for an existing brief.
+
+    Used when the user adds/edits intent data on a previously-researched
+    company without re-running the research pipeline.
+    """
+    if not is_enabled() or not init_schema():
+        return False
+    try:
+        with _conn() as c, c.cursor() as cur:
+            cur.execute(
+                """
+                UPDATE briefs
+                SET intent_data = %s, intent_synthesis = %s
+                WHERE profile_slug = %s AND url = %s
+                """,
+                (
+                    intent_data or None, intent_synthesis or None,
+                    profile_slug, url,
+                ),
+            )
+        return True
+    except Exception as e:
+        log.warning("history update_intent failed: %s", e)
+        return False
+
+
+_SELECT_COLS = (
+    "profile_slug, url, company_name, brief_json, "
+    "intent_data, intent_synthesis, researched_at"
+)
+
+
+def _row_to_saved(r: dict) -> SavedBrief:
+    return SavedBrief(
+        profile_slug=r["profile_slug"],
+        url=r["url"],
+        company_name=r["company_name"] or r["url"],
+        brief=r["brief_json"],
+        researched_at=r["researched_at"],
+        intent_data=r.get("intent_data") or "",
+        intent_synthesis=r.get("intent_synthesis") or "",
+    )
 
 
 def list_briefs(profile_slug: str, search: str = "") -> list[SavedBrief]:
@@ -130,8 +205,8 @@ def list_briefs(profile_slug: str, search: str = "") -> list[SavedBrief]:
             if search.strip():
                 pattern = f"%{search.strip().lower()}%"
                 cur.execute(
-                    """
-                    SELECT profile_slug, url, company_name, brief_json, researched_at
+                    f"""
+                    SELECT {_SELECT_COLS}
                     FROM briefs
                     WHERE profile_slug = %s
                       AND (LOWER(company_name) LIKE %s OR LOWER(url) LIKE %s)
@@ -141,8 +216,8 @@ def list_briefs(profile_slug: str, search: str = "") -> list[SavedBrief]:
                 )
             else:
                 cur.execute(
-                    """
-                    SELECT profile_slug, url, company_name, brief_json, researched_at
+                    f"""
+                    SELECT {_SELECT_COLS}
                     FROM briefs
                     WHERE profile_slug = %s
                     ORDER BY researched_at DESC
@@ -150,16 +225,7 @@ def list_briefs(profile_slug: str, search: str = "") -> list[SavedBrief]:
                     (profile_slug,),
                 )
             rows = cur.fetchall()
-        return [
-            SavedBrief(
-                profile_slug=r["profile_slug"],
-                url=r["url"],
-                company_name=r["company_name"] or r["url"],
-                brief=r["brief_json"],
-                researched_at=r["researched_at"],
-            )
-            for r in rows
-        ]
+        return [_row_to_saved(r) for r in rows]
     except Exception as e:
         log.warning("history list_briefs failed: %s", e)
         return []
@@ -172,8 +238,8 @@ def get_brief(profile_slug: str, url: str) -> Optional[SavedBrief]:
     try:
         with _conn() as c, c.cursor(row_factory=dict_row) as cur:
             cur.execute(
-                """
-                SELECT profile_slug, url, company_name, brief_json, researched_at
+                f"""
+                SELECT {_SELECT_COLS}
                 FROM briefs
                 WHERE profile_slug = %s AND url = %s
                 """,
@@ -182,13 +248,7 @@ def get_brief(profile_slug: str, url: str) -> Optional[SavedBrief]:
             r = cur.fetchone()
         if not r:
             return None
-        return SavedBrief(
-            profile_slug=r["profile_slug"],
-            url=r["url"],
-            company_name=r["company_name"] or r["url"],
-            brief=r["brief_json"],
-            researched_at=r["researched_at"],
-        )
+        return _row_to_saved(r)
     except Exception as e:
         log.warning("history get_brief failed: %s", e)
         return None

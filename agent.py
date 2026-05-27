@@ -44,6 +44,12 @@ class DraftRequest:
     profile_slug: str = "daniel"    # which user profile's tone to use
     linkedin_text: str = ""
     extra_notes: str = ""
+    # 6sense intent data: raw user paste (keywords + pages visited) and the
+    # 2-3 sentence hypothesis produced by intent.synthesize_intent(). Both
+    # optional. When present, they get woven into the draft as additional
+    # context — anchors a more specific "why now" hook.
+    intent_data: str = ""
+    intent_synthesis: str = ""
 
 
 SYSTEM_PROMPT_BASE = """You are writing a single cold email for Daniel at 6sense.
@@ -63,6 +69,34 @@ SYSTEM_PROMPT_BASE = """You are writing a single cold email for Daniel at 6sense
   The opener (insight reference + immediate "so what") goes on its own line,
   then a blank line, then the next thought on a new paragraph. Walls of text
   are unreadable on a phone. Aim for 3 to 4 short paragraphs in a body.
+
+# DO NOT SOUND LIKE AI
+
+The biggest tell that an email was written by an LLM is overly formal,
+overly complete phrasing. Daniel writes the way a human BDR talks:
+
+- USE ABBREVIATIONS for role titles. Write "AEs", "VPs", "CRO", "CMO",
+  "AE", "BDR", "SDR", "RevOps". NOT "Account Executives", "Vice Presidents",
+  "Chief Revenue Officer", "Director-level positions".
+- DROP "around your X offering" / "around your Y product line" / "to support
+  the Z initiative" qualifiers. They're padding. Replace with shorter forms:
+  - BAD: "hiring Account Executives and Director-level roles around your
+    Data-as-a-Service offering"
+  - GOOD: "hiring for AEs and Director level roles for your data offering"
+- SHORTEN proper nouns when natural. "Data-as-a-Service" → "data offering"
+  or "DaaS motion". "Account-Based Marketing platform" → "ABM platform".
+- LOWERCASE the company name mid-sentence sometimes (matches Daniel's
+  lowercase-subject habit and overall casual register). "saw snorkel is
+  hiring..." reads more human than "Saw Snorkel is actively hiring...".
+- DROP "actively" and "currently" qualifiers in front of verbs. They're
+  filler. "actively hiring" → "hiring". "currently looking" → "looking".
+- DROP "I noticed that" / "I can see that" / "It appears that". Start
+  with the verb. "Saw snorkel is hiring..." not "I noticed that snorkel
+  is actively hiring..."
+
+If you find yourself writing a sentence that's grammatically perfect and
+fully spelled out, ask: would a salesperson typing this on their phone in
+30 seconds say it this way? Usually they'd shorten it.
 
 # DO NOT RE-QUOTE INSIGHT NOUNS VERBATIM
 
@@ -340,6 +374,39 @@ def _build_user_message(req: DraftRequest) -> str:
     parts.append(f"\nWHAT I'M PITCHING: {req.your_pitch}")
     parts.append(f"\nINSIGHTS TO ANCHOR ON:\n{_format_insights(req.selected_insights)}")
 
+    # 6sense intent data: SECONDARY, additive context. Insights stay the
+    # primary anchor of the email. Intent shows up as a short "noticed some
+    # research" line that adds evidence the timing is right. Do NOT inflate
+    # length to accommodate it.
+    if req.intent_synthesis or req.intent_data:
+        parts.append("\nINTENT CONTEXT (6sense data) — SECONDARY ANCHOR:")
+        if req.intent_synthesis:
+            parts.append(f"WHY-NOW HYPOTHESIS: {req.intent_synthesis}")
+        if req.intent_data:
+            parts.append(
+                f"RAW PASTE (keywords + pages visited):\n"
+                f"---\n{req.intent_data.strip()}\n---"
+            )
+        parts.append(
+            "HARD RULES for intent context:\n"
+            "- The PRIMARY anchor of email 1 is still the selected insight. "
+            "Do NOT lead with intent.\n"
+            "- Intent shows up as ONE short additional sentence after the "
+            "insight hook. FORMAT: 'Noticed some research from the {company} "
+            "team around {top keyword 1} and {top keyword 2}.' Pull the "
+            "1-2 most prominent KEYWORDS from the raw paste, not the pages "
+            "on our website. Do NOT say 'your team has been looking at our "
+            "intent-data page' — that is too loose and reads like surveillance. "
+            "Reference what THEY are researching by topic.\n"
+            "- This ADDITIONAL sentence does NOT extend the email's word "
+            "budget. Keep total length within the per-email range. Trim the "
+            "rest if needed.\n"
+            "- If the keywords don't meaningfully connect to the selected "
+            "insight, skip the intent line entirely. Don't force it in.\n"
+            "- The recipient should never feel surveilled. One subtle "
+            "reference to their research topics, not a forensic readout."
+        )
+
     if req.extra_notes:
         parts.append(f"\nADDITIONAL CONTEXT:\n{req.extra_notes}")
 
@@ -445,6 +512,42 @@ THREE threads now (not two):
   Email 5 is a REPLY, subject = `Re: <email 4's subject>` (verbatim).
 - **Thread 3 = email 6 ONLY.** Standalone breakup with its own fresh
   subject. The subject MUST be exactly: `bad timing / should I move on?`
+
+# INTENT DATA — SECONDARY, ADDITIVE context across the cadence
+
+If a "WHY-NOW HYPOTHESIS" and / or "RAW PASTE" appear in the user message,
+treat them as SUPPORTING evidence, never the primary anchor. Insights from
+section "INSIGHTS TO ANCHOR ON" remain the primary hook of every email.
+
+CRITICAL: intent shows up as ONE short additional sentence, not as a
+new opener or a length extension. Same word budget per email. If intent
+doesn't naturally fit, skip it entirely.
+
+- **Email 1**: anchor opens on the selected INSIGHT (unchanged). Then ONE
+  short follow-up sentence in the form: "Noticed some research from the
+  {company} team around {top keyword 1} and {top keyword 2}." Pull the
+  1-2 most prominent KEYWORDS from the raw paste, NOT the 6sense pages
+  they visited. Reference what they're researching by TOPIC. Do NOT say
+  "your team has been looking at our intent-data page" — that reads
+  surveilly and weak. Total word count stays within the 45-75 range.
+  Trim other lines to make room.
+- **Email 2**: when picking the customer story, prefer one whose topic
+  aligns with the keyword themes if there's a clean match. No additional
+  intent reference in the body. Customer choice is the only effect.
+- **Email 4**: the "what we're hearing from peer leaders" line may
+  loosely echo the keyword themes (e.g. if they're researching attribution
+  and intent, mention attribution clarity as a topic peers are raising).
+  No raw quotes from the paste. Same word budget.
+- **Email 5**: the value-add should match what they have been researching
+  if a clean match exists. Otherwise default to your normal choice.
+- **Emails 3 and 6**: unchanged. Never reference intent.
+
+If the hypothesis or paste doesn't meaningfully connect to a chosen
+insight or persona, SKIP the intent line in email 1. Forcing it in
+weakens the email.
+
+The reader should never feel surveilled. One subtle reference at most,
+in one email, paraphrased. Never list raw keywords or page URLs.
 
 # Per-email framework + word budgets
 
