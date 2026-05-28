@@ -8,6 +8,7 @@ from dotenv import load_dotenv
 load_dotenv(override=True)
 
 from agent import DraftRequest, draft_cadence, draft_email
+import drafts
 import history
 from intent import synthesize_intent
 from insights import (
@@ -43,7 +44,12 @@ BUCKET_LABELS = {
     "strategic_moves":   "Strategic moves",
 }
 
-st.set_page_config(page_title="Email Insights", page_icon="✦", layout="wide")
+st.set_page_config(
+    page_title="Email Insights",
+    page_icon="✦",
+    layout="wide",
+    initial_sidebar_state="expanded",
+)
 inject_styles()
 
 # ============================================================================
@@ -154,7 +160,7 @@ with st.sidebar:
 # ============================================================================
 render_hero()
 
-draft_tab, profiles_tab = st.tabs(["Draft", "Profiles"])
+draft_tab, drafts_tab, profiles_tab = st.tabs(["Research", "Drafts", "Profiles"])
 
 # ----------------------------------------------------------------------------
 # DRAFT TAB
@@ -393,6 +399,47 @@ with draft_tab:
                 except Exception:
                     pass
 
+            # --- Previous drafts for this prospect (read-only reference) ---
+            if active_profile and drafts.is_enabled():
+                try:
+                    past = drafts.list_drafts_for_prospect(active_profile, website)
+                except Exception:
+                    past = []
+                if past:
+                    with st.expander(f"📝 Previous drafts for this company ({len(past)})", expanded=False):
+                        for d in past:
+                            ts = d.drafted_at.strftime("%Y-%m-%d %H:%M")
+                            label_type = "Cadence" if d.draft_type == "cadence" else "Single"
+                            recip = f" · {d.recipient}" if d.recipient else ""
+                            cols = st.columns([7, 1])
+                            cols[0].markdown(
+                                f"<div style='font-size:0.82rem; font-weight:500; color:var(--fg);'>"
+                                f"{label_type} · {ts}{recip}</div>",
+                                unsafe_allow_html=True,
+                            )
+                            if cols[1].button("×", key=f"del_draft_{d.id}", help="Delete this draft"):
+                                drafts.delete_draft(d.id)
+                                st.rerun()
+                            # Render body
+                            if d.draft_type == "single":
+                                render_email_output(d.draft.get("text", ""))
+                            else:
+                                for em in d.draft.get("emails", []):
+                                    st.markdown(
+                                        f"<div style='font-size:0.74rem; color:var(--fg-2); "
+                                        f"margin:0.4rem 0 0.1rem;'>"
+                                        f"Email {em.get('position')} · {em.get('purpose','').replace('-', ' ')} "
+                                        f"· <span style='color:var(--fg-1);'>{em.get('subject','')}</span>"
+                                        f"</div>",
+                                        unsafe_allow_html=True,
+                                    )
+                                    render_email_output(em.get("body", ""))
+                            st.markdown(
+                                "<hr style='border:none; border-top:1px solid var(--border); "
+                                "margin:0.5rem 0;'>",
+                                unsafe_allow_html=True,
+                            )
+
             # --- §04 Draft ---
             section_head("04", "Compose")
 
@@ -410,36 +457,12 @@ with draft_tab:
                 format_func=lambda s: PERSONAS[s].label,
             )
 
-            your_pitch = st.text_area(
-                "Your angle",
-                "Quick chat to see if 6sense could help your team.",
-                height=70,
-            )
-
-            with st.expander("Hyper-personalize with LinkedIn"):
-                linkedin_text = st.text_area(
-                    "Paste profile TEXT (About, Activity / Posts, Featured) "
-                    "— URLs alone won't work, LinkedIn blocks scraping",
-                    height=180,
-                    label_visibility="collapsed",
-                )
-                # Warn if user pasted just a URL — that does nothing.
-                _stripped = linkedin_text.strip()
-                if _stripped and len(_stripped) < 200 and (
-                    _stripped.startswith("http") or "linkedin.com/" in _stripped
-                ):
-                    st.warning(
-                        "That looks like just a LinkedIn URL. The drafter can't fetch "
-                        "the page (LinkedIn blocks scraping). Open the profile in your "
-                        "browser, copy the **About** section, then the **Activity / Posts** "
-                        "tab content (especially recent posts), and paste that text here. "
-                        "Without text content, the LinkedIn hook will be skipped."
-                    )
-                    # Don't pass the URL through — the model will ignore it anyway,
-                    # and clearing it removes the false "mandatory LinkedIn use" signal.
-                    linkedin_text = ""
-
-            extra_notes = st.text_area("Notes (optional)", "", height=70)
+            # The "Your angle" pitch, LinkedIn paste, and extra notes were
+            # removed to keep the UI focused. The drafter relies on the
+            # selected insights + persona + (optional) intent context.
+            your_pitch = ""
+            linkedin_text = ""
+            extra_notes = ""
 
             # Output mode toggle — single email vs full 6-email cadence
             mode = st.radio(
@@ -481,6 +504,22 @@ with draft_tab:
                         except Exception as e:
                             st.error(f"Draft failed: {e}")
                             st.stop()
+                    # Auto-save to drafts history (best-effort, silent on failure)
+                    try:
+                        drafts.save_draft(
+                            profile_slug=active_profile,
+                            url=website,
+                            company_name=website,
+                            draft_type="single",
+                            draft={"text": text},
+                            recipient=(
+                                f"{recipient_name}, {recipient_title}".strip(", ")
+                                if recipient_name or recipient_title else ""
+                            ),
+                            persona=persona_slug,
+                        )
+                    except Exception:
+                        pass
                     section_head("05", "Output")
                     render_email_output(text)
                     st.caption(
@@ -510,6 +549,23 @@ with draft_tab:
                     if not emails:
                         st.warning("No emails returned.")
                         st.stop()
+
+                    # Auto-save the full cadence to drafts history (best-effort)
+                    try:
+                        drafts.save_draft(
+                            profile_slug=active_profile,
+                            url=website,
+                            company_name=website,
+                            draft_type="cadence",
+                            draft={"emails": emails},
+                            recipient=(
+                                f"{recipient_name}, {recipient_title}".strip(", ")
+                                if recipient_name or recipient_title else ""
+                            ),
+                            persona=persona_slug,
+                        )
+                    except Exception:
+                        pass
 
                     # Render emails grouped by thread
                     current_thread = None
@@ -549,6 +605,168 @@ with draft_tab:
                         f"in {usage['input_tokens']}  ·  out {usage['output_tokens']}  ·  "
                         f"cache read {usage['cache_read']}  ·  cache write {usage['cache_write']}"
                     )
+
+# ----------------------------------------------------------------------------
+# DRAFTS TAB — browse every past draft for the active profile
+# ----------------------------------------------------------------------------
+with drafts_tab:
+    section_head("", "Drafts history")
+    if not active_profile:
+        st.info("Pick a profile in the sidebar to see your drafts.")
+    elif not drafts.is_enabled():
+        st.warning(
+            "Drafts history needs a Postgres connection. Set `DATABASE_URL` "
+            "in the environment and restart."
+        )
+    else:
+        st.caption(
+            "Every email and cadence you've drafted, grouped by company. "
+            "Search filters across company, recipient, and persona."
+        )
+
+        # Search + persona filter row
+        col_search, col_persona, col_sort = st.columns([3, 1.5, 1.5])
+        with col_search:
+            search_q = st.text_input(
+                "Search",
+                placeholder="Filter by company, recipient, or URL",
+                label_visibility="collapsed",
+                key="drafts_search",
+            ).strip().lower()
+        with col_persona:
+            persona_filter = st.selectbox(
+                "Persona",
+                options=["All personas"] + [PERSONAS[s].label for s in PERSONAS],
+                index=0,
+                label_visibility="collapsed",
+                key="drafts_persona_filter",
+            )
+        with col_sort:
+            sort_mode = st.selectbox(
+                "Sort",
+                options=["Company (A-Z)", "Most recent"],
+                index=0,
+                label_visibility="collapsed",
+                key="drafts_sort",
+            )
+
+        all_drafts = drafts.list_recent_drafts(active_profile, limit=500)
+
+        # Apply filters
+        if search_q:
+            all_drafts = [
+                d for d in all_drafts
+                if search_q in (d.url or "").lower()
+                or search_q in (d.recipient or "").lower()
+                or search_q in (d.company_name or "").lower()
+                or search_q in (d.persona or "").lower()
+            ]
+        if persona_filter != "All personas":
+            wanted_slug = next(
+                (s for s in PERSONAS if PERSONAS[s].label == persona_filter),
+                None,
+            )
+            if wanted_slug:
+                all_drafts = [d for d in all_drafts if d.persona == wanted_slug]
+
+        if not all_drafts:
+            st.markdown(
+                "<div style='padding:2.5rem 1rem; text-align:center; "
+                "color:var(--fg-2); font-size:0.92rem;'>"
+                "<div style='font-size:2rem; margin-bottom:0.5rem;'>📭</div>"
+                "No drafts match. Generate one from the Draft tab and it'll "
+                "show up here automatically.</div>",
+                unsafe_allow_html=True,
+            )
+        else:
+            # Group drafts by company URL
+            from collections import defaultdict
+            groups: dict[str, list] = defaultdict(list)
+            for d in all_drafts:
+                groups[d.url].append(d)
+
+            # Sort group keys
+            if sort_mode == "Company (A-Z)":
+                ordered_urls = sorted(
+                    groups.keys(), key=lambda u: (u or "").lower()
+                )
+            else:
+                # Most recent: groups ordered by their most recent draft
+                ordered_urls = sorted(
+                    groups.keys(),
+                    key=lambda u: max(d.drafted_at for d in groups[u]),
+                    reverse=True,
+                )
+
+            total = len(all_drafts)
+            st.caption(
+                f"{total} draft{'s' if total != 1 else ''} across "
+                f"{len(groups)} compan{'y' if len(groups) == 1 else 'ies'}"
+            )
+
+            for url in ordered_urls:
+                group = sorted(groups[url], key=lambda d: d.drafted_at, reverse=True)
+                # Personas represented in this group, as chips
+                persona_chips = sorted({
+                    PERSONAS[d.persona].label if d.persona in PERSONAS else "Other"
+                    for d in group if d.persona
+                })
+                chip_html = ""
+                if persona_chips:
+                    chip_html = " &nbsp;" + " ".join(
+                        f"<span style='display:inline-block; "
+                        f"font-family:var(--font); font-size:0.65rem; "
+                        f"font-weight:600; letter-spacing:0.03em; "
+                        f"text-transform:uppercase; padding:0.12rem 0.45rem; "
+                        f"border-radius:999px; background:var(--accent-bg); "
+                        f"color:var(--accent-deep);'>{p}</span>"
+                        for p in persona_chips
+                    )
+                # Company header
+                st.markdown(
+                    f"<div style='margin:1.5rem 0 0.4rem;'>"
+                    f"<span style='font-family:var(--font); font-size:1.05rem; "
+                    f"font-weight:600; color:var(--fg);'>{url}</span> "
+                    f"<span style='font-family:var(--font); font-size:0.78rem; "
+                    f"color:var(--fg-2);'>· {len(group)} "
+                    f"draft{'s' if len(group) != 1 else ''}</span>"
+                    f"{chip_html}</div>",
+                    unsafe_allow_html=True,
+                )
+
+                for d in group:
+                    ts = d.drafted_at.strftime("%b %d, %Y · %H:%M")
+                    label_type = "📋 Cadence" if d.draft_type == "cadence" else "✉ Single"
+                    persona_label = (
+                        PERSONAS[d.persona].label if d.persona in PERSONAS else ""
+                    )
+                    persona_bit = f" · {persona_label}" if persona_label else ""
+                    recip_bit = f" · {d.recipient}" if d.recipient else ""
+                    summary = f"{label_type}{persona_bit}{recip_bit} · {ts}"
+                    with st.expander(summary, expanded=False):
+                        cols = st.columns([7, 1])
+                        cols[0].caption(f"Saved {ts}")
+                        if cols[1].button("Delete", key=f"del_draft_tab_{d.id}"):
+                            drafts.delete_draft(d.id)
+                            st.rerun()
+
+                        if d.draft_type == "single":
+                            render_email_output(d.draft.get("text", ""))
+                        else:
+                            for em in d.draft.get("emails", []):
+                                st.markdown(
+                                    f"<div style='margin:0.6rem 0 0.1rem;'>"
+                                    f"<span style='font-family:var(--font); font-size:0.78rem; "
+                                    f"font-weight:600; color:var(--fg);'>Email {em.get('position')}</span> "
+                                    f"<span style='font-family:var(--font); font-size:0.72rem; "
+                                    f"color:var(--fg-2);'>· {em.get('purpose','').replace('-', ' ')}</span><br>"
+                                    f"<span style='font-family:var(--font); font-size:0.76rem; "
+                                    f"color:var(--fg-1);'>Subject: <strong>{em.get('subject','')}</strong></span>"
+                                    f"</div>",
+                                    unsafe_allow_html=True,
+                                )
+                                render_email_output(em.get("body", ""))
+
 
 # ----------------------------------------------------------------------------
 # PROFILES TAB

@@ -69,19 +69,22 @@ html, body, .stApp {
 
 .stApp {
   background:
-    radial-gradient(ellipse 60% 40% at 15% 0%, oklch(96% 0.025 32 / 0.55), transparent 60%),
-    radial-gradient(ellipse 50% 35% at 100% 100%, oklch(96% 0.02 200 / 0.4), transparent 60%),
+    radial-gradient(ellipse 70% 50% at 10% -5%, oklch(95% 0.045 32 / 0.7), transparent 55%),
+    radial-gradient(ellipse 55% 40% at 100% 10%, oklch(95% 0.04 200 / 0.55), transparent 60%),
+    radial-gradient(ellipse 60% 50% at 50% 100%, oklch(96% 0.025 32 / 0.35), transparent 65%),
     var(--bg);
   background-attachment: fixed;
 }
 
-#MainMenu, header[data-testid="stHeader"], .stDeployButton,
-[data-testid="stToolbar"], footer { display: none !important; }
+/* Only hide MainMenu (hamburger) and Deploy. Leave Streamlit's header
+   ALONE so its sidebar collapse/expand control keeps working. */
+#MainMenu, .stDeployButton, footer { display: none !important; }
+header[data-testid="stHeader"] { background: transparent !important; }
 
 .main .block-container {
-  padding-top: 1.5rem !important;
-  padding-bottom: 5rem !important;
-  max-width: 880px;
+  padding-top: 2.25rem !important;
+  padding-bottom: 6rem !important;
+  max-width: 920px;
 }
 
 /* Subtle page-load fade for the main container */
@@ -99,9 +102,9 @@ h1, h2, h3, h4 {
   color: var(--fg);
   letter-spacing: -0.012em;
 }
-h1 { font-size: 1.55rem; font-weight: 600; line-height: 1.25; margin: 0.25rem 0 0.25rem; }
-h2 { font-size: 1.1rem;  font-weight: 600; line-height: 1.3;  margin: 1.5rem 0 0.5rem; }
-h3 { font-size: 0.95rem; font-weight: 600; line-height: 1.35; margin: 1.1rem 0 0.4rem; }
+h1 { font-size: 1.8rem;  font-weight: 600; line-height: 1.2;  margin: 0.25rem 0 0.5rem; letter-spacing: -0.02em; }
+h2 { font-size: 1.2rem;  font-weight: 600; line-height: 1.3;  margin: 1.5rem 0 0.5rem; }
+h3 { font-size: 1rem;    font-weight: 600; line-height: 1.35; margin: 1.1rem 0 0.4rem; }
 
 .main p, [data-testid="stMarkdownContainer"] p, .main li {
   font-family: var(--font);
@@ -125,58 +128,77 @@ h3 { font-size: 0.95rem; font-weight: 600; line-height: 1.35; margin: 1.1rem 0 0
   align-items: center;
   justify-content: space-between;
   gap: 1rem;
-  padding: 0.25rem 0 1rem;
+  padding: 0.75rem 0 1.5rem;
   border-bottom: 1px solid var(--border);
-  margin-bottom: 1.5rem;
+  margin-bottom: 2rem;
 }
 .eia-header-title {
-  display: flex; align-items: center; gap: 0.6rem;
+  display: flex; align-items: center; gap: 0.85rem;
 }
 .eia-mark {
-  width: 22px; height: 22px;
-  border-radius: 6px;
+  width: 36px; height: 36px;
+  border-radius: 10px;
   background: linear-gradient(135deg, var(--accent), var(--accent-deep));
   position: relative;
-  box-shadow: 0 0 0 1px oklch(50% 0.18 30 / 0.2);
+  box-shadow:
+    0 0 0 1px oklch(50% 0.18 30 / 0.2),
+    0 4px 12px oklch(50% 0.18 30 / 0.18);
 }
 .eia-mark::after {
-  content: '';
-  position: absolute; inset: 6px;
-  border-radius: 2px;
-  background: var(--fg-on-accent);
-  opacity: 0.95;
+  content: '✦';
+  position: absolute; inset: 0;
+  display: flex; align-items: center; justify-content: center;
+  color: var(--fg-on-accent);
+  font-size: 18px;
+  line-height: 1;
 }
 .eia-header-title h1 {
-  font-size: 0.98rem;
+  font-size: 1.35rem;
   font-weight: 600;
   margin: 0;
+  letter-spacing: -0.02em;
 }
 .eia-header-sub {
-  font-size: 0.78rem;
+  font-size: 0.84rem;
   color: var(--fg-2);
 }
 
-/* ---- Section heads (bullet + title) ---- */
+/* ---- Section heads (numbered badge + title + supporting note) ---- */
 .eia-section-head {
-  margin: 1.75rem 0 0.6rem;
-  display: flex; align-items: center; gap: 0.55rem;
+  margin: 2.25rem 0 1rem;
+  display: flex; align-items: center; gap: 0.7rem;
+  padding-bottom: 0.65rem;
+  border-bottom: 1px solid var(--border);
 }
-.eia-section-head::before {
-  content: '';
-  width: 7px; height: 7px;
-  border-radius: 50%;
-  background: var(--accent);
-  box-shadow: 0 0 0 3px var(--accent-bg);
+.eia-section-head .badge {
+  display: inline-flex;
+  align-items: center; justify-content: center;
+  min-width: 26px; height: 26px;
+  padding: 0 0.45rem;
+  border-radius: 999px;
+  background: var(--accent-bg);
+  color: var(--accent-deep);
+  font-family: var(--font);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+.eia-section-head .badge.no-num {
+  background: transparent;
+  min-width: 0;
+  padding: 0;
 }
 .eia-section-head .title {
-  font-size: 0.95rem;
+  font-size: 1.15rem;
   font-weight: 600;
   color: var(--fg);
+  letter-spacing: -0.012em;
 }
 .eia-section-head .note {
   font-size: 0.78rem;
   color: var(--fg-2);
-  margin-left: 0.25rem;
+  margin-left: 0.3rem;
+  font-style: italic;
 }
 
 /* ---- Buttons (bulletproof contrast) ---- */
@@ -233,17 +255,19 @@ button[kind="primary"],
 button[data-testid="stBaseButton-primary"],
 button[data-testid="baseButton-primary"],
 .stButton > button[kind="primary"] {
-  background: var(--accent) !important;
+  background: linear-gradient(180deg, var(--accent), var(--accent-deep)) !important;
   color: var(--fg-on-accent) !important;
-  border: 1px solid var(--accent) !important;
+  border: 1px solid var(--accent-deep) !important;
   font-weight: 600 !important;
+  box-shadow: 0 2px 6px oklch(54% 0.2 28 / 0.25), 0 1px 0 oklch(100% 0 0 / 0.2) inset !important;
 }
 button[kind="primary"]:hover,
 button[data-testid="stBaseButton-primary"]:hover,
 button[data-testid="baseButton-primary"]:hover {
-  background: var(--accent-hi) !important;
-  border-color: var(--accent-hi) !important;
+  background: linear-gradient(180deg, var(--accent-hi), var(--accent-deep)) !important;
+  border-color: var(--accent-deep) !important;
   color: var(--fg-on-accent) !important;
+  box-shadow: 0 4px 12px oklch(54% 0.2 28 / 0.35), 0 1px 0 oklch(100% 0 0 / 0.25) inset !important;
 }
 button[kind="primary"]:active,
 button[data-testid="stBaseButton-primary"]:active {
@@ -266,11 +290,11 @@ button[data-testid="stBaseButton-primary"]:disabled {
   background: var(--surface) !important;
   border: 1px solid var(--border-2) !important;
   border-radius: var(--radius) !important;
-  padding: 0.55rem 0.75rem !important;
+  padding: 0.65rem 0.85rem !important;
   font-family: var(--font) !important;
-  font-size: 0.88rem !important;
+  font-size: 0.92rem !important;
   color: var(--fg) !important;
-  box-shadow: none !important;
+  box-shadow: 0 1px 2px oklch(20% 0.012 270 / 0.04) !important;
   transition: border-color 180ms var(--ease), box-shadow 180ms var(--ease);
 }
 .stTextInput input:focus,
@@ -349,50 +373,69 @@ button[data-testid="stBaseButton-primary"]:disabled {
   border-color: var(--accent) !important;
 }
 
-/* ---- Tabs ---- */
+/* ---- Tabs (pill-style, friendlier than underline) ---- */
 .stTabs [data-baseweb="tab-list"] {
-  border-bottom: 1px solid var(--border);
-  gap: 1.5rem;
-  background: transparent;
-  padding: 0;
+  gap: 0.4rem;
+  background: var(--surface-2);
+  padding: 0.35rem;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  width: fit-content;
+  margin-bottom: 1.75rem;
 }
 .stTabs [data-baseweb="tab"] {
   background: transparent !important;
   font-family: var(--font) !important;
-  font-size: 0.84rem !important;
+  font-size: 0.88rem !important;
   font-weight: 500 !important;
-  letter-spacing: 0 !important;
+  letter-spacing: -0.005em !important;
   text-transform: none !important;
-  padding: 0.55rem 0 !important;
+  padding: 0.5rem 1.1rem !important;
   color: var(--fg-2) !important;
-  border-radius: 0 !important;
+  border-radius: 999px !important;
   border: none !important;
-  transition: color 180ms var(--ease);
+  transition: color 180ms var(--ease), background 180ms var(--ease);
 }
-.stTabs [data-baseweb="tab"]:hover { color: var(--fg) !important; }
-.stTabs [aria-selected="true"] {
+.stTabs [data-baseweb="tab"]:hover {
   color: var(--fg) !important;
-  border-bottom: 2px solid var(--accent) !important;
-  margin-bottom: -1px;
+  background: var(--surface) !important;
 }
-.stTabs [data-baseweb="tab-highlight"] { display: none !important; }
+.stTabs [aria-selected="true"] {
+  color: var(--fg-on-accent) !important;
+  background: var(--accent) !important;
+  border-bottom: none !important;
+}
+.stTabs [aria-selected="true"]:hover {
+  background: var(--accent) !important;
+}
+.stTabs [data-baseweb="tab-highlight"],
+.stTabs [data-baseweb="tab-border"] { display: none !important; }
 
 /* ---- Sidebar ---- */
 [data-testid="stSidebar"] {
-  background: var(--bg-2);
+  background:
+    linear-gradient(180deg, oklch(97% 0.012 40 / 0.9), oklch(97% 0.012 40 / 0.5)),
+    var(--bg-2);
   border-right: 1px solid var(--border);
 }
-[data-testid="stSidebar"] .block-container { padding-top: 1.25rem; }
+[data-testid="stSidebar"] .block-container { padding-top: 1.5rem; }
 [data-testid="stSidebar"] h3 {
   font-family: var(--font);
   font-size: 0.72rem !important;
   font-weight: 600;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--fg-2);
-  margin: 1.1rem 0 0.45rem;
+  margin: 1.25rem 0 0.5rem;
 }
 [data-testid="stSidebar"] .stButton > button { width: 100%; }
+
+/* Subtle separator above each sidebar section */
+[data-testid="stSidebar"] hr {
+  border: none;
+  border-top: 1px solid var(--border);
+  margin: 1rem 0 0.5rem;
+}
 
 /* ---- Alerts ---- */
 [data-testid="stAlert"] {
@@ -691,12 +734,21 @@ def render_hero(subtitle: str = "") -> None:
     )
 
 
-def section_head(_number: str, title: str, note: str = "") -> None:
-    """Section heading with coral bullet."""
+def section_head(number: str, title: str, note: str = "") -> None:
+    """Section heading with a numbered badge in coral.
+
+    `number` may be a digit ("01", "1", "02") or a non-numeric label
+    ("§", ""). Empty or non-numeric values render as a smaller dot-style
+    badge so the section still has visual rhythm without an absurd label.
+    """
+    badge_text = (number or "").strip()
+    badge_cls = "badge" if badge_text and badge_text.lstrip("0").isdigit() else "badge no-num"
+    badge_inner = badge_text.lstrip("0") if badge_cls == "badge" else "✦"
     note_html = f'<span class="note">{note}</span>' if note else ""
     st.markdown(
         f"""
         <div class="eia-section-head">
+          <span class="{badge_cls}">{badge_inner}</span>
           <span class="title">{title}</span>
           {note_html}
         </div>
