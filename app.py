@@ -135,11 +135,14 @@ with st.sidebar:
                         help=f"Researched {sb.researched_at.date().isoformat()}",
                     ):
                         # Restore brief + URL + any saved intent context so
-                        # the Draft tab renders as if we just researched.
+                        # the Research tab renders as if we just researched.
                         # Write to the same keys the widgets use so the
-                        # text areas pre-fill on rerender.
+                        # text fields actually pre-fill on rerender. The
+                        # URL field is bound to "website_input"; writing
+                        # only to "website" leaves the input stale.
                         st.session_state["brief"] = sb.brief
                         st.session_state["website"] = sb.url
+                        st.session_state["website_input"] = sb.url
                         st.session_state["intent_data_input"] = sb.intent_data
                         st.session_state["intent_synthesis_input"] = sb.intent_synthesis
                         st.session_state["loaded_from_history"] = True
@@ -182,6 +185,14 @@ with draft_tab:
         )
         # Keep session_state["website"] in sync with whatever's typed
         st.session_state["website"] = website
+
+        # Canonical lookup URL: use the same normalization the research
+        # pipeline + history modules use so saves and lookups always match.
+        from insights import root_domain as _root_domain
+        try:
+            website_key = _root_domain(website) if website else ""
+        except Exception:
+            website_key = website
 
         run_col, reload_col = st.columns([1, 4])
         with run_col:
@@ -392,7 +403,7 @@ with draft_tab:
                 try:
                     history.update_intent(
                         profile_slug=active_profile,
-                        url=website,
+                        url=website_key,
                         intent_data=intent_data,
                         intent_synthesis=intent_synthesis,
                     )
@@ -400,9 +411,12 @@ with draft_tab:
                     pass
 
             # --- Previous drafts for this prospect (read-only reference) ---
-            if active_profile and drafts.is_enabled():
+            past = []
+            if active_profile and drafts.is_enabled() and website_key:
                 try:
-                    past = drafts.list_drafts_for_prospect(active_profile, website)
+                    past = drafts.list_drafts_for_prospect(
+                        active_profile, website_key,
+                    )
                 except Exception:
                     past = []
                 if past:
@@ -508,8 +522,8 @@ with draft_tab:
                     try:
                         drafts.save_draft(
                             profile_slug=active_profile,
-                            url=website,
-                            company_name=website,
+                            url=website_key,
+                            company_name=website_key,
                             draft_type="single",
                             draft={"text": text},
                             recipient=(
@@ -554,8 +568,8 @@ with draft_tab:
                     try:
                         drafts.save_draft(
                             profile_slug=active_profile,
-                            url=website,
-                            company_name=website,
+                            url=website_key,
+                            company_name=website_key,
                             draft_type="cadence",
                             draft={"emails": emails},
                             recipient=(
@@ -679,22 +693,31 @@ with drafts_tab:
                 unsafe_allow_html=True,
             )
         else:
-            # Group drafts by company URL
+            # Group drafts by company NAME (derived from URL), not raw URL.
+            # Raw URLs can vary (https://acme.com, acme.com, acme.com/about),
+            # which splits the same company across multiple groups. Mapping
+            # every URL through the same _company_name_from_url helper that
+            # the research pipeline uses makes the grouping bulletproof.
             from collections import defaultdict
+            from insights import _company_name_from_url as _name_from_url
+
+            def _company_name(d) -> str:
+                name = (_name_from_url(d.url) or "").strip()
+                return name or (d.company_name or d.url or "Unknown")
+
             groups: dict[str, list] = defaultdict(list)
             for d in all_drafts:
-                groups[d.url].append(d)
+                groups[_company_name(d)].append(d)
 
             # Sort group keys
             if sort_mode == "Company (A-Z)":
-                ordered_urls = sorted(
-                    groups.keys(), key=lambda u: (u or "").lower()
+                ordered_names = sorted(
+                    groups.keys(), key=lambda n: n.lower()
                 )
             else:
-                # Most recent: groups ordered by their most recent draft
-                ordered_urls = sorted(
+                ordered_names = sorted(
                     groups.keys(),
-                    key=lambda u: max(d.drafted_at for d in groups[u]),
+                    key=lambda n: max(d.drafted_at for d in groups[n]),
                     reverse=True,
                 )
 
@@ -704,8 +727,8 @@ with drafts_tab:
                 f"{len(groups)} compan{'y' if len(groups) == 1 else 'ies'}"
             )
 
-            for url in ordered_urls:
-                group = sorted(groups[url], key=lambda d: d.drafted_at, reverse=True)
+            for company in ordered_names:
+                group = sorted(groups[company], key=lambda d: d.drafted_at, reverse=True)
                 # Personas represented in this group, as chips
                 persona_chips = sorted({
                     PERSONAS[d.persona].label if d.persona in PERSONAS else "Other"
@@ -722,11 +745,11 @@ with drafts_tab:
                         f"color:var(--accent-deep);'>{p}</span>"
                         for p in persona_chips
                     )
-                # Company header
+                # Company header (brand-form name, no URL)
                 st.markdown(
                     f"<div style='margin:1.5rem 0 0.4rem;'>"
                     f"<span style='font-family:var(--font); font-size:1.05rem; "
-                    f"font-weight:600; color:var(--fg);'>{url}</span> "
+                    f"font-weight:600; color:var(--fg);'>{company}</span> "
                     f"<span style='font-family:var(--font); font-size:0.78rem; "
                     f"color:var(--fg-2);'>· {len(group)} "
                     f"draft{'s' if len(group) != 1 else ''}</span>"
