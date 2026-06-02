@@ -99,7 +99,8 @@ WHAT MATTERS for outreach (include if found in the search results):
 HARD RULES — non-negotiable:
 
 - TODAY IS {today}. THE 6-MONTH CUTOFF IS {cutoff}. \
-Anything dated before {cutoff} is OUT. No exceptions.
+Prefer insights dated on or after {cutoff}. Older insights are allowed only \
+as fallback to reach the 4-6 count (see PREFERENCE ORDER below).
 - DATE HANDLING: For each kept insight, the `date` field comes from this \
 priority list:
   1. The DATE line of the source search result, if present (copy verbatim).
@@ -108,11 +109,8 @@ priority list:
   3. `null` if neither is available. Vague language like "recent" or \
 "this quarter" or "this year" does NOT count — use null.
 - If the EXCERPT/TITLE explicitly references an event-date before {cutoff} \
-(e.g. "$100M Series D in May 2025", "announced in 2023"), DROP THE INSIGHT \
-entirely. The event is outside the window even if the article is fresh.
-- The cutoff is enforced both in your output AND by post-filter in code. \
-Insights you mark with a pre-cutoff date will be dropped by the post-filter, \
-so don't include them.
+(e.g. "$100M Series D in May 2025"), prefer to skip it UNLESS you need it to \
+reach 4 insights — in which case include it with its real (older) date.
 - Customer wins / case studies count ONLY if the announcement is dated within the 6-month window.
 - "Public statements about growth priorities" means earnings calls, investor letters, \
 conference keynotes, podcast or press interviews with executives. Not generic blog posts.
@@ -120,7 +118,13 @@ conference keynotes, podcast or press interviews with executives. Not generic bl
 recognition was published within the 6-month window.
 - Do NOT include awards, technical research papers, or engineering benchmarks unless they \
 directly signal a GTM motion or business expansion.
-- Return 4-6 high-quality insights. Quality beats quantity. Do not pad.
+- Return 4-6 high-quality insights. Quality beats quantity. Do not pad with fluff.
+- PREFERENCE ORDER: first fill with insights dated within the 6-month window \
+({cutoff} → {today}). If you have fewer than 6 in-window insights, you MAY \
+include older ones (dated before {cutoff}) to reach up to 6 total — but ONLY \
+if they are still meaningfully relevant to outreach (recent funding round still \
+being deployed, a strategic pivot still playing out, etc.). Always copy the real \
+date — never relabel an old event as recent. {fallback_note}
 
 OUTPUT — a single JSON object inside one ```json fenced block. NO prose before or after.
 
@@ -146,13 +150,25 @@ instead "newly hired CRO is likely re-evaluating the sales tech stack."
 """
 
 
-def _build_brief_system() -> str:
+def _build_brief_system(extend_window: bool = False) -> str:
     """Inject today's date and the 6-month cutoff into the system prompt."""
     today = date.today()
     cutoff = today - timedelta(days=183)
+    if extend_window:
+        fallback_note = (
+            "EXTENDED WINDOW MODE: the user has explicitly opted to look beyond "
+            "6 months. You may freely include insights up to ~24 months old to "
+            "reach 4-6 results. Still prefer fresher ones first."
+        )
+    else:
+        fallback_note = (
+            "Default mode: only fall back to pre-cutoff insights when you cannot "
+            "reach 4 in-window insights from the search results."
+        )
     return BRIEF_SYSTEM_TEMPLATE.format(
         today=today.isoformat(),
         cutoff=cutoff.isoformat(),
+        fallback_note=fallback_note,
     )
 
 
@@ -213,6 +229,7 @@ def _tavily_search(
 def _gather_search_results(
     company_name: str,
     company_host: str,
+    days: int = 183,
 ) -> dict[str, list[dict]]:
     """Fire 4 Tavily searches in parallel.
 
@@ -255,11 +272,40 @@ def _gather_search_results(
     results: dict[str, list[dict]] = {}
     with ThreadPoolExecutor(max_workers=4) as ex:
         future_to_key = {
-            ex.submit(_tavily_search, client, q, topic=t): k
+            ex.submit(_tavily_search, client, q, days=days, topic=t): k
             for k, (q, t) in queries.items()
         }
         for fut in as_completed(future_to_key):
             results[future_to_key[fut]] = fut.result()
+
+    # Fallback: if all primary queries came back empty (no errors, just empty),
+    # Tavily's strict brand-quoted + year queries probably starved the result
+    # set. This is the most common failure mode where the agent "returns
+    # nothing" but Claude finds plenty on the same URL directly. Retry with
+    # broader, unquoted queries and no year — and a wider time window.
+    non_empty = sum(
+        1 for items in results.values()
+        if items and not all(r.get("_error") for r in items)
+    )
+    if non_empty == 0:
+        broad_queries = {
+            "broad_news": f"{company_name} news",
+            "broad_business": f"{company_name} announcement",
+            "broad_site": f"site:{company_host}",
+            "broad_general": f"{company_name} company",
+        }
+        broad_days = max(days, 365)
+        with ThreadPoolExecutor(max_workers=4) as ex:
+            future_to_key = {
+                ex.submit(
+                    _tavily_search, client, q,
+                    days=broad_days, topic="general", max_results=6,
+                ): k
+                for k, q in broad_queries.items()
+            }
+            for fut in as_completed(future_to_key):
+                results[future_to_key[fut]] = fut.result()
+        results["_fallback_used"] = [{"note": "broad fallback queries fired"}]  # type: ignore
     return results
 
 
@@ -294,6 +340,7 @@ def generate_brief(
     website_url: str,
     force_refresh: bool = False,
     profile_slug: Optional[str] = None,
+    extend_window: bool = False,
 ) -> dict:
     """Tavily search (parallel) + single Claude synthesis call. ~5-10s total.
 
@@ -314,8 +361,11 @@ def generate_brief(
     homepage_text = scrape_homepage(domain)
 
     # Step 1: fire 4 Tavily searches in parallel. ~2s total.
+    search_days = 730 if extend_window else 183
     try:
-        search_results = _gather_search_results(company_name, company_host)
+        search_results = _gather_search_results(
+            company_name, company_host, days=search_days,
+        )
     except RuntimeError as e:
         return {
             "company_summary": "",
@@ -343,7 +393,7 @@ def generate_brief(
         "the 6-month window. The homepage is just for the company_summary."
     )
 
-    system_prompt = _build_brief_system()
+    system_prompt = _build_brief_system(extend_window=extend_window)
     response = client.messages.create(
         model=MODEL,
         max_tokens=4000,
@@ -355,22 +405,39 @@ def generate_brief(
     text = "\n".join(b.text for b in response.content if b.type == "text")
     brief = _parse_brief(text)
 
-    # Hard server-side filter: drop any insight whose parsed date is before
-    # the 6-month cutoff. Defensive — the prompt also tells the model to do
-    # this, but model decisions on the boundary aren't reliable.
+    # Server-side filter: prefer in-window insights. Pad with older ones
+    # (freshest-first) up to a total of 6 only when we have <4 in-window.
+    # In extend_window mode, keep everything (cap 6, freshest first).
     cutoff = date.today() - timedelta(days=183)
-    kept, dropped = [], []
+    in_window, out_window = [], []
     for ins in brief.get("insights", []):
         d = _parse_insight_date(ins.get("date", "") or "")
         if d is not None and d < cutoff:
-            dropped.append(ins)
-            continue
-        kept.append(ins)
-    brief["insights"] = kept
-    if dropped:
-        brief["_dropped_pre_cutoff"] = [
-            {"title": d.get("title"), "date": d.get("date")} for d in dropped
-        ]
+            out_window.append((d, ins))
+        else:
+            in_window.append(ins)
+
+    # Freshest pre-cutoff first
+    out_window.sort(key=lambda t: t[0], reverse=True)
+    out_sorted = [ins for _, ins in out_window]
+
+    if extend_window:
+        merged = (in_window + out_sorted)[:6]
+        fallback_used = bool(out_sorted) and not in_window
+    else:
+        if len(in_window) >= 4:
+            merged = in_window[:6]
+            fallback_used = False
+        else:
+            need = 6 - len(in_window)
+            merged = in_window + out_sorted[:need]
+            fallback_used = bool(out_sorted) and len(in_window) < 4
+
+    brief["insights"] = merged
+    brief["_in_window_count"] = len(in_window)
+    brief["_out_window_used"] = max(0, len(merged) - len(in_window))
+    if fallback_used:
+        brief["_fallback_to_older"] = True
 
     if brief.get("insights"):
         cache_brief(domain, brief)
@@ -379,8 +446,30 @@ def generate_brief(
             history.save_brief(profile_slug, domain, company_name, brief)
     else:
         brief["_raw"] = text
-        brief["_warning"] = "Model returned 0 insights (after cutoff filter)."
+        # Diagnostic counts — when this is the empty result, the user can see
+        # whether Tavily actually returned anything before Claude synthesized.
+        per_query_counts = {
+            k: len([r for r in v if not r.get("_error")])
+            for k, v in search_results.items()
+            if isinstance(v, list)
+        }
+        total_results = sum(per_query_counts.values())
+        if total_results == 0:
+            brief["_warning"] = (
+                "Tavily returned 0 search results for this company across all "
+                "queries. This is why the agent returned nothing while Claude "
+                "directly might find content — Claude uses its own web search. "
+                "Try enabling 'Search beyond 6 months' and re-running."
+            )
+        else:
+            brief["_warning"] = (
+                f"Tavily returned {total_results} results but the model rejected "
+                "them all. Likely the results were off-topic for this brand "
+                "name (common with generic single-word brands). Try enabling "
+                "'Search beyond 6 months'."
+            )
         brief["_search_results"] = search_text[:2000]
+        brief["_search_diagnostics"] = per_query_counts
     return brief
 
 

@@ -194,16 +194,31 @@ with draft_tab:
         except Exception:
             website_key = website
 
-        run_col, reload_col = st.columns([1, 4])
+        run_col, opt_col = st.columns([1, 4])
         with run_col:
             run = st.button(
                 "Run research", type="primary",
                 disabled=not website, use_container_width=True,
             )
+        with opt_col:
+            extend_window = st.checkbox(
+                "Search beyond 6 months",
+                value=st.session_state.get("extend_window", False),
+                key="extend_window",
+                help=(
+                    "By default we only surface insights from the last 6 "
+                    "months. Toggle this to broaden the search up to ~2 years "
+                    "— useful when a company has had nothing fresh to report."
+                ),
+            )
         if run:
             with st.spinner("Reading homepage, searching news, synthesizing (~15s)"):
                 try:
-                    brief = generate_brief(website, profile_slug=active_profile)
+                    brief = generate_brief(
+                        website,
+                        profile_slug=active_profile,
+                        extend_window=extend_window,
+                    )
                     st.session_state["brief"] = brief
                     st.session_state.pop("loaded_from_history", None)
                     # Fresh research = clear stale intent context from prior prospect.
@@ -243,11 +258,16 @@ with draft_tab:
             # the raw output for debugging. Also offer a re-research button.
             if not brief.get("insights"):
                 st.warning(
-                    "The model returned 0 insights. This is usually a prompt-restriction "
-                    "issue, not a 'no recent activity' reality. Try re-researching, or "
-                    "expand the raw output below to see what the model actually said."
+                    brief.get("_warning")
+                    or "The model returned 0 insights."
                 )
-                cols = st.columns([1, 4])
+                diag = brief.get("_search_diagnostics")
+                if diag:
+                    st.caption(
+                        "Tavily per-query result counts: "
+                        + ", ".join(f"{k}={v}" for k, v in diag.items())
+                    )
+                cols = st.columns([1, 1, 3])
                 if cols[0].button("Re-research", use_container_width=True):
                     with st.spinner("Re-researching with cache bypassed"):
                         try:
@@ -255,15 +275,47 @@ with draft_tab:
                                 website,
                                 force_refresh=True,
                                 profile_slug=active_profile,
+                                extend_window=extend_window,
                             )
                             st.session_state["brief"] = brief
                             st.rerun()
                         except Exception as e:
                             st.error(f"Re-research failed: {e}")
                             st.stop()
+                if cols[1].button(
+                    "Retry · extended window",
+                    use_container_width=True,
+                    help="Bypass the 6-month limit and search up to ~2 years.",
+                ):
+                    with st.spinner("Re-researching with extended window"):
+                        try:
+                            brief = generate_brief(
+                                website,
+                                force_refresh=True,
+                                profile_slug=active_profile,
+                                extend_window=True,
+                            )
+                            st.session_state["brief"] = brief
+                            st.session_state["extend_window"] = True
+                            st.rerun()
+                        except Exception as e:
+                            st.error(f"Extended re-research failed: {e}")
+                            st.stop()
                 with st.expander("Raw model output"):
                     st.text(brief.get("_raw", "(no raw output captured)"))
+                with st.expander("Raw search results (Tavily)"):
+                    st.text(brief.get("_search_results", "(none)"))
                 st.stop()
+
+            # Banner when we had to reach beyond the 6-month window to fill 6
+            if brief.get("_fallback_to_older"):
+                in_w = brief.get("_in_window_count", 0)
+                out_w = brief.get("_out_window_used", 0)
+                st.info(
+                    f"Only {in_w} insight(s) found within the 6-month window. "
+                    f"Padded with {out_w} older insight(s) — check the date "
+                    "tags before referencing."
+                )
 
             st.caption("Select the insights to anchor the email on.")
 
