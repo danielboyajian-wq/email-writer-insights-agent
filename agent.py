@@ -125,6 +125,41 @@ signals", "buyer intent data") that sound like reused marketing copy and
 don't connect to the actual signal you're referencing. Connect insight to
 plain-English business consequence.
 
+# MULTI-INSIGHT SYNTHESIS RULE
+
+When the user has selected MORE THAN ONE insight, the opener MUST name
+an underlying theme that ties them together (e.g. "rapid growth
+trajectory," "expansion into new markets," "leadership reshuffle,"
+"platform consolidation"). Do NOT stitch the insights with "and." Do
+NOT recite each insight as a separate clause. The reader should feel
+ONE observation, not a list.
+
+For 6sense specifically: the underlying theme should, when natural,
+connect to a 6sense talking point: pipeline acceleration, intent
+signals, account prioritization, GTM efficiency, ABX. The synthesis
+becomes the bridge to why 6sense matters for this specific moment.
+
+Example:
+
+Selected signals:
+  1. HealthStream Q1 2026 Record Revenue: +10.5% YoY to $81.2M
+  2. Competency Suite revenue up 17.3% as customers adopt bundled apps
+
+WRONG (lists serially):
+  "Saw Competency Suite revenue up 17.3% as customers adopt bundled
+  apps and Q1 2026 Record Revenue: +10.5% YoY to $81.2M."
+
+RIGHT (one underlying theme, both specifics woven in):
+  "Saw HealthStream is on a real growth tear right now. Q1 revenue
+  up 10.5%, Competency Suite climbing 17.3% as customers consolidate
+  into the bundle. That kind of pace usually means the next quarter's
+  GTM plan has to lock in on the right accounts faster, which is
+  exactly where intent signals start to matter more."
+
+Why the RIGHT version works: names the thread ("growth tear"), weaves
+both data points into ONE sentence, then bridges to a 6sense angle
+(intent signals + account prioritization) without naming the product.
+
 # FORBIDDEN PHRASES (the model keeps reaching for these)
 
 Do NOT use any variant of:
@@ -478,6 +513,8 @@ def _build_user_message(req: DraftRequest) -> str:
         "- NO EM DASHES. Not the character, not double-hyphens. Use commas, "
         "periods, colons, parentheses.\n"
         "- TONE first: every sentence must match the tone block.\n"
+        "- If 2+ insights selected: apply the MULTI-INSIGHT SYNTHESIS RULE. "
+        "Name the underlying theme. Do not list insights serially with 'and.'\n"
         "- If LinkedIn provided AND it contains a personal hook, the opening "
         "line MUST use that hook. If LinkedIn only has generic profile facts, "
         "skip the hook and lead with the insight.\n"
@@ -622,12 +659,16 @@ in one email, paraphrased. Never list raw keywords or page URLs.
 # Per-email framework + word budgets
 
 ## Email 1 — Insight-based opener (40-60 words body, hard ceiling 65)
-Hook on the strongest insight (or LinkedIn personal detail if provided).
-Name the specific signal ONCE (the actual filing, the actual product
-launch, the actual hire). Then translate into plain-English business
-consequence in YOUR words, not 6sense marketing copy. Avoid robotic
-connectors like "not just who filled out a form" or "anonymous research
-signals".
+- If ONE insight is selected: hook on it directly. Name the specific
+  signal ONCE (the actual filing, the product launch, the actual hire).
+  Translate into plain-English business consequence in YOUR words.
+- If 2+ insights are selected: apply the MULTI-INSIGHT SYNTHESIS RULE
+  from the universal rules above. Name the underlying theme and weave
+  the specifics into ONE coherent observation. NEVER list the insights
+  serially with "and."
+- Naturally bridge toward what this means strategically. Avoid robotic
+  connectors like "not just who filled out a form" or "anonymous
+  research signals".
 
 VALUE PROP RULE — MUST CONNECT TO THE IMPLIED PAIN, NOT GENERIC:
 
@@ -879,6 +920,11 @@ Re-read every email before finalizing. Three self-checks:
      Value prop: "6sense ties marketing activity to specific in-market
      accounts and the pipeline they generate, so the pipeline-
      contribution conversation gets a lot easier at $4B run-rate."
+
+9. MULTI-INSIGHT (email 1 only, when 2+ insights were provided):
+   Scan email 1's opener. If it strings the insights together with
+   "and" as separate clauses, REWRITE using a single underlying theme.
+   The opener should feel like ONE observation, not a list.
 """
 
 
@@ -962,3 +1008,151 @@ def draft_cadence(req: DraftRequest) -> tuple[dict, dict]:
         "cache_write": getattr(response.usage, "cache_creation_input_tokens", 0),
     }
     return cadence, usage
+
+
+# ============================================================================
+# Single-email parsing
+# ============================================================================
+
+def parse_single_email(text: str) -> dict:
+    """Split raw 'SUBJECT: ...\\n\\n<body>' output into {subject, body}."""
+    m = re.match(r"SUBJECT:\s*(.+?)\n+(.*)", text.strip(), re.DOTALL | re.IGNORECASE)
+    if m:
+        return {"subject": m.group(1).strip(), "body": m.group(2).strip()}
+    return {"subject": "", "body": text.strip()}
+
+
+# ============================================================================
+# Per-email refine
+# ============================================================================
+
+_REFINE_OVERRIDE = """\
+# REFINE MODE — ACTIVE
+
+The user has a drafted email and wants to refine it. Rules:
+- Apply ONLY the change the user asks for. Do not rewrite parts they
+  did not mention.
+- Preserve the subject line UNLESS the instruction explicitly says to
+  change it.
+- If the instruction conflicts with a core writing rule (e.g. "use em
+  dashes," "make it more generic," "ignore the word budget"), ignore
+  the conflicting part and apply the rest.
+
+OUTPUT FORMAT OVERRIDE (supersedes the SUBJECT/body text format above):
+Return ONLY a JSON object, no other text before or after:
+{"subject": "...", "body": "..."}
+"""
+
+_EMAIL_PURPOSES = {
+    1: "Insight-based opener: hook on the strongest insight, bridge to 6sense angle.",
+    2: "Customer story tied back to email 1's pain.",
+    3: "Short bump (Re: email 1's subject). Two lines max.",
+    4: "Industry observation + tie-back to email 1's signal.",
+    5: "Value-add: blog post, research stat, or different customer story.",
+    6: "Breakup with ONE situation-driven reason. Plain prose, no bullet list.",
+}
+
+
+def _build_refine_system(company_context: str, tone: str) -> list[dict]:
+    return [
+        {"type": "text", "text": SYSTEM_PROMPT_BASE + "\n\n---\n\n" + _REFINE_OVERRIDE},
+        {
+            "type": "text",
+            "text": (
+                f"# COMPANY CONTEXT — what we sell, never invent claims outside this\n\n"
+                f"{company_context}\n\n---\n\n"
+                f"# TONE — match this exactly\n\n{tone}"
+            ),
+            "cache_control": {"type": "ephemeral", "ttl": "1h"},
+        },
+    ]
+
+
+def _build_refine_user_message(
+    current_email: dict,
+    refine_instruction: str,
+    is_cadence: bool,
+    email_position: int | None,
+    selected_insights: list[dict],
+    persona_priorities: str,
+) -> str:
+    parts = []
+
+    if is_cadence and email_position is not None:
+        purpose = _EMAIL_PURPOSES.get(email_position, "")
+        parts.append(
+            f"This is email {email_position} of a 6-email cadence. "
+            f"Its purpose: {purpose}\n"
+            "Preserve this email's purpose. If the instruction contradicts "
+            "the purpose, apply what you can while keeping the purpose intact."
+        )
+
+    if selected_insights:
+        parts.append(
+            f"INSIGHTS THIS EMAIL IS ANCHORED ON:\n{_format_insights(selected_insights)}"
+        )
+
+    if persona_priorities:
+        parts.append(f"PERSONA CONTEXT:\n{persona_priorities}")
+
+    parts.append(
+        f"CURRENT EMAIL:\n"
+        f"Subject: {current_email.get('subject', '')}\n\n"
+        f"{current_email.get('body', '')}"
+    )
+
+    parts.append(f"REFINE INSTRUCTION: {refine_instruction}")
+    parts.append(
+        'Apply the instruction. Return ONLY the JSON: {"subject": "...", "body": "..."}'
+    )
+
+    return "\n\n".join(parts)
+
+
+def refine_email(
+    current_email: dict,
+    refine_instruction: str,
+    is_cadence: bool = False,
+    email_position: int | None = None,
+    company_context: str = "",
+    tone: str = "",
+    selected_insights: list[dict] | None = None,
+    persona_priorities: str = "",
+) -> dict:
+    """Rewrite a drafted email per the user's instruction while preserving
+    all core writing rules.
+
+    current_email: {subject: str, body: str}
+    Returns: {subject: str, body: str}
+    """
+    client = anthropic.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
+    response = client.messages.create(
+        model=MODEL,
+        max_tokens=800,
+        system=_build_refine_system(company_context, tone),
+        messages=[{
+            "role": "user",
+            "content": _build_refine_user_message(
+                current_email=current_email,
+                refine_instruction=refine_instruction,
+                is_cadence=is_cadence,
+                email_position=email_position,
+                selected_insights=selected_insights or [],
+                persona_priorities=persona_priorities,
+            ),
+        }],
+    )
+    text = next((b.text for b in response.content if b.type == "text"), "")
+
+    m = re.search(r"\{.*\}", text, re.DOTALL)
+    if not m:
+        raise ValueError(f"Refine returned no JSON. Raw: {text[:200]}")
+    try:
+        result = json.loads(m.group(0))
+    except json.JSONDecodeError as exc:
+        raise ValueError(f"Refine JSON invalid: {exc}. Raw: {text[:200]}") from exc
+
+    return {
+        "subject": _strip_em_dashes(result.get("subject", current_email.get("subject", ""))),
+        "body": _strip_em_dashes(result.get("body", current_email.get("body", ""))),
+    }

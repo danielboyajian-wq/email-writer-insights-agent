@@ -7,7 +7,15 @@ from dotenv import load_dotenv
 
 load_dotenv(override=True)
 
-from agent import DraftRequest, draft_cadence, draft_email
+from agent import (
+    DraftRequest,
+    draft_cadence,
+    draft_email,
+    load_company_context,
+    load_tone,
+    parse_single_email,
+    refine_email,
+)
 import drafts
 import history
 from intent import synthesize_intent
@@ -586,12 +594,10 @@ with draft_tab:
                         )
                     except Exception:
                         pass
-                    section_head("05", "Output")
-                    render_email_output(text)
-                    st.caption(
-                        f"in {usage['input_tokens']}  ·  out {usage['output_tokens']}  ·  "
-                        f"cache read {usage['cache_read']}  ·  cache write {usage['cache_write']}"
-                    )
+                    st.session_state["draft_result"] = parse_single_email(text)
+                    st.session_state["draft_usage"] = usage
+                    st.session_state["last_draft_mode"] = "single"
+                    st.session_state.pop("original_draft", None)
                 else:
                     with st.spinner("Drafting all 6 emails in your voice (~30s)."):
                         try:
@@ -599,8 +605,6 @@ with draft_tab:
                         except Exception as e:
                             st.error(f"Cadence failed: {e}")
                             st.stop()
-
-                    section_head("05", "Cadence")
 
                     if cadence.get("_error"):
                         st.warning(f"Could not parse cadence JSON: {cadence['_error']}")
@@ -633,44 +637,174 @@ with draft_tab:
                     except Exception:
                         pass
 
-                    # Render emails grouped by thread
-                    current_thread = None
-                    for em in emails:
-                        thr = em.get("thread", 1)
-                        if thr != current_thread:
-                            st.markdown(
-                                f"<div style='font-family:var(--font); font-size:0.72rem; "
-                                f"font-weight:600; letter-spacing:0.06em; text-transform:uppercase; "
-                                f"color:var(--fg-2); margin:1.4rem 0 0.5rem;'>"
-                                f"Thread {thr}</div>",
-                                unsafe_allow_html=True,
-                            )
-                            current_thread = thr
-                        # Header strip for each email
-                        st.markdown(
-                            f"<div style='display:flex; align-items:baseline; gap:0.6rem; "
-                            f"margin:0.5rem 0 0.25rem;'>"
-                            f"<span style='font-family:var(--font); font-size:0.78rem; "
-                            f"font-weight:600; color:var(--fg);'>Email {em.get('position')}</span>"
-                            f"<span style='font-family:var(--font); font-size:0.72rem; "
-                            f"color:var(--fg-2);'>· {em.get('purpose', '').replace('-', ' ')}</span>"
-                            f"</div>",
-                            unsafe_allow_html=True,
-                        )
-                        # Subject line
-                        st.markdown(
-                            f"<div style='font-family:var(--font); font-size:0.82rem; "
-                            f"color:var(--fg-1); margin-bottom:0.35rem;'>"
-                            f"<span style='color:var(--fg-2);'>Subject:</span> "
-                            f"<span style='font-weight:500;'>{em.get('subject', '')}</span></div>",
-                            unsafe_allow_html=True,
-                        )
-                        render_email_output(em.get("body", ""))
+                    st.session_state["cadence_result"] = emails
+                    st.session_state["cadence_usage"] = usage
+                    st.session_state["last_draft_mode"] = "cadence"
+                    for _i in range(6):
+                        st.session_state.pop(f"original_email_{_i}", None)
+                        st.session_state.pop(f"refine_attempt_{_i}", None)
 
-                    st.caption(
-                        f"in {usage['input_tokens']}  ·  out {usage['output_tokens']}  ·  "
-                        f"cache read {usage['cache_read']}  ·  cache write {usage['cache_write']}"
+            # --- Output + Refine (rendered from session state, survives reruns) ---
+            _last_mode = st.session_state.get("last_draft_mode")
+
+            if _last_mode == "single" and "draft_result" in st.session_state:
+                _email = st.session_state["draft_result"]
+                section_head("05", "Output")
+                render_email_output(f"SUBJECT: {_email['subject']}\n\n{_email['body']}")
+                _usage = st.session_state.get("draft_usage", {})
+                st.caption(
+                    f"in {_usage.get('input_tokens', '?')}  ·  "
+                    f"out {_usage.get('output_tokens', '?')}  ·  "
+                    f"cache read {_usage.get('cache_read', '?')}  ·  "
+                    f"cache write {_usage.get('cache_write', '?')}"
+                )
+
+                st.markdown("---")
+                _attempt = st.session_state.get("refine_attempt_single", 0)
+                _refine_text = st.text_area(
+                    "Refine this email",
+                    placeholder="e.g. 'make this shorter', 'less formal', 'mention our 2026 report'",
+                    key=f"refine_single_{_attempt}",
+                    height=80,
+                )
+                _rc1, _rc2 = st.columns([1, 5])
+                with _rc1:
+                    if st.button(
+                        "Refine",
+                        key="refine_single_btn",
+                        disabled=not _refine_text.strip(),
+                    ):
+                        with st.spinner("Refining…"):
+                            try:
+                                _refined = refine_email(
+                                    current_email=_email,
+                                    refine_instruction=_refine_text,
+                                    is_cadence=False,
+                                    company_context=load_company_context(),
+                                    tone=load_tone(active_profile),
+                                    selected_insights=st.session_state.get(
+                                        "selected_insights", []
+                                    ),
+                                )
+                                if "original_draft" not in st.session_state:
+                                    st.session_state["original_draft"] = dict(_email)
+                                st.session_state["draft_result"] = _refined
+                                st.session_state["refine_attempt_single"] = _attempt + 1
+                                st.rerun()
+                            except Exception as _e:
+                                st.error(f"Refine failed: {_e}")
+                with _rc2:
+                    if st.session_state.get("original_draft"):
+                        if st.button("Revert to original", key="revert_single"):
+                            st.session_state["draft_result"] = st.session_state.pop(
+                                "original_draft"
+                            )
+                            st.session_state["refine_attempt_single"] = _attempt + 1
+                            st.rerun()
+
+            elif _last_mode == "cadence" and "cadence_result" in st.session_state:
+                section_head("05", "Cadence")
+                _emails = st.session_state["cadence_result"]
+
+                _current_thread = None
+                for _i, _em in enumerate(_emails):
+                    _thr = _em.get("thread", 1)
+                    if _thr != _current_thread:
+                        st.markdown(
+                            f"<div style='font-family:var(--font); font-size:0.72rem; "
+                            f"font-weight:600; letter-spacing:0.06em; text-transform:uppercase; "
+                            f"color:var(--fg-2); margin:1.4rem 0 0.5rem;'>"
+                            f"Thread {_thr}</div>",
+                            unsafe_allow_html=True,
+                        )
+                        _current_thread = _thr
+                    st.markdown(
+                        f"<div style='display:flex; align-items:baseline; gap:0.6rem; "
+                        f"margin:0.5rem 0 0.25rem;'>"
+                        f"<span style='font-family:var(--font); font-size:0.78rem; "
+                        f"font-weight:600; color:var(--fg);'>Email {_em.get('position')}</span>"
+                        f"<span style='font-family:var(--font); font-size:0.72rem; "
+                        f"color:var(--fg-2);'>· {_em.get('purpose', '').replace('-', ' ')}"
+                        f"</span></div>",
+                        unsafe_allow_html=True,
                     )
+                    st.markdown(
+                        f"<div style='font-family:var(--font); font-size:0.82rem; "
+                        f"color:var(--fg-1); margin-bottom:0.35rem;'>"
+                        f"<span style='color:var(--fg-2);'>Subject:</span> "
+                        f"<span style='font-weight:500;'>{_em.get('subject', '')}</span></div>",
+                        unsafe_allow_html=True,
+                    )
+                    render_email_output(_em.get("body", ""))
+
+                    st.markdown("---")
+                    _attempt_i = st.session_state.get(f"refine_attempt_{_i}", 0)
+                    _refine_text_i = st.text_area(
+                        f"Refine email {_i + 1}",
+                        placeholder="e.g. 'make this shorter', 'less formal'",
+                        key=f"refine_email_{_i}_{_attempt_i}",
+                        height=80,
+                    )
+                    _bc1, _bc2, _ = st.columns([1, 1, 4])
+                    with _bc1:
+                        if st.button(
+                            "Refine",
+                            key=f"refine_btn_{_i}",
+                            disabled=not _refine_text_i.strip(),
+                        ):
+                            with st.spinner(f"Refining email {_i + 1}…"):
+                                try:
+                                    _refined_i = refine_email(
+                                        current_email={
+                                            "subject": _em.get("subject", ""),
+                                            "body": _em.get("body", ""),
+                                        },
+                                        refine_instruction=_refine_text_i,
+                                        is_cadence=True,
+                                        email_position=_em.get("position", _i + 1),
+                                        company_context=load_company_context(),
+                                        tone=load_tone(active_profile),
+                                        selected_insights=st.session_state.get(
+                                            "selected_insights", []
+                                        ),
+                                    )
+                                    if f"original_email_{_i}" not in st.session_state:
+                                        st.session_state[f"original_email_{_i}"] = {
+                                            "subject": _em.get("subject", ""),
+                                            "body": _em.get("body", ""),
+                                        }
+                                    _updated = list(st.session_state["cadence_result"])
+                                    _updated[_i] = {
+                                        **_em,
+                                        "subject": _refined_i["subject"],
+                                        "body": _refined_i["body"],
+                                    }
+                                    st.session_state["cadence_result"] = _updated
+                                    st.session_state[f"refine_attempt_{_i}"] = _attempt_i + 1
+                                    st.rerun()
+                                except Exception as _e:
+                                    st.error(f"Refine failed: {_e}")
+                    with _bc2:
+                        if st.session_state.get(f"original_email_{_i}"):
+                            if st.button("Revert", key=f"revert_email_{_i}"):
+                                _orig = st.session_state.pop(f"original_email_{_i}")
+                                _updated = list(st.session_state["cadence_result"])
+                                _updated[_i] = {
+                                    **_em,
+                                    "subject": _orig["subject"],
+                                    "body": _orig["body"],
+                                }
+                                st.session_state["cadence_result"] = _updated
+                                st.session_state[f"refine_attempt_{_i}"] = _attempt_i + 1
+                                st.rerun()
+
+                _usage_c = st.session_state.get("cadence_usage", {})
+                st.caption(
+                    f"in {_usage_c.get('input_tokens', '?')}  ·  "
+                    f"out {_usage_c.get('output_tokens', '?')}  ·  "
+                    f"cache read {_usage_c.get('cache_read', '?')}  ·  "
+                    f"cache write {_usage_c.get('cache_write', '?')}"
+                )
 
 # ----------------------------------------------------------------------------
 # DRAFTS TAB — browse every past draft for the active profile
