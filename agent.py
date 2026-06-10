@@ -2,6 +2,7 @@
 
 Single tone, loaded from tones/tone.md. Tone block is prompt-cached.
 """
+from __future__ import annotations
 
 import json
 import os
